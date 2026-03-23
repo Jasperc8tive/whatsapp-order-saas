@@ -9,9 +9,11 @@ import { formatCurrency } from "@/lib/utils";
 interface PlanCardProps {
   plan: (typeof PLANS)[PlanId];
   isCurrentPlan: boolean;
+  isUpgradable: boolean;
+  upgradesAvailable: boolean;
 }
 
-function PlanCard({ plan, isCurrentPlan }: PlanCardProps) {
+function PlanCard({ plan, isCurrentPlan, isUpgradable, upgradesAvailable }: PlanCardProps) {
   return (
     <div
       className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
@@ -63,13 +65,35 @@ function PlanCard({ plan, isCurrentPlan }: PlanCardProps) {
         ))}
       </ul>
 
-      {!isCurrentPlan && (
+      {!isCurrentPlan && isUpgradable && upgradesAvailable && (
+        <form action="/dashboard/billing/upgrade" method="post" className="mt-auto">
+          <input type="hidden" name="plan" value={plan.id} />
+          <button
+            className="w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-black transition-colors"
+            type="submit"
+          >
+            Upgrade to {plan.name}
+          </button>
+        </form>
+      )}
+
+      {!isCurrentPlan && isUpgradable && !upgradesAvailable && (
         <button
           disabled
           className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
-          title="Plan upgrades coming soon"
+          title="Upgrades unavailable until users.plan exists in this deployment"
         >
-          Upgrade to {plan.name}
+          Upgrade unavailable
+        </button>
+      )}
+
+      {!isCurrentPlan && !isUpgradable && (
+        <button
+          disabled
+          className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
+          title="You can only move to a higher plan"
+        >
+          Not available
         </button>
       )}
     </div>
@@ -153,31 +177,60 @@ function UsageMeter({ used, limit, planName }: UsageMeterProps) {
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams?: { upgraded?: string; error?: string };
+}) {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Fetch vendor plan
   const { data: vendorRow } = await supabase
     .from("users")
-    .select("plan")
+    .select("*")
     .eq("id", user.id)
     .single();
 
-  const currentPlanId = (vendorRow?.plan ?? DEFAULT_PLAN) as PlanId;
+  const rawPlan = (vendorRow as Record<string, unknown> | null)?.plan;
+  const planFromDb =
+    typeof rawPlan === "string" && rawPlan in PLANS
+      ? (rawPlan as PlanId)
+      : null;
+
+  const currentPlanId = (planFromDb ?? DEFAULT_PLAN) as PlanId;
   const currentPlan = PLANS[currentPlanId] ?? PLANS[DEFAULT_PLAN];
+  const upgradesAvailable = planFromDb !== null;
 
   // Count this month's orders (use admin client to bypass RLS)
   const admin = createAdminClient();
   const used = await getMonthOrderCount(admin, user.id);
 
   const planOrder: PlanId[] = ["starter", "growth", "pro"];
+  const rank = (plan: PlanId) => planOrder.indexOf(plan);
 
   return (
     <div className="space-y-6 max-w-4xl">
+
+      {searchParams?.upgraded && searchParams.upgraded in PLANS && (
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl px-4 py-3">
+          Plan updated successfully to <span className="font-semibold">{PLANS[searchParams.upgraded as PlanId].name}</span>.
+        </div>
+      )}
+
+      {searchParams?.error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          {decodeURIComponent(searchParams.error)}
+        </div>
+      )}
+
+      {!upgradesAvailable && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-xl px-4 py-3">
+          Upgrades are disabled in this deployment because the <span className="font-mono">users.plan</span> column is unavailable.
+        </div>
+      )}
 
       {/* ── Usage ── */}
       <UsageMeter
@@ -195,6 +248,8 @@ export default async function BillingPage() {
               key={pid}
               plan={PLANS[pid]}
               isCurrentPlan={pid === currentPlanId}
+              isUpgradable={rank(pid) > rank(currentPlanId)}
+              upgradesAvailable={upgradesAvailable}
             />
           ))}
         </div>
@@ -202,7 +257,7 @@ export default async function BillingPage() {
 
       {/* ── Note ── */}
       <p className="text-xs text-gray-400">
-        Plan upgrades are coming soon. To change your plan early, contact support.
+        Upgrades are processed securely via Paystack checkout. Downgrades are currently disabled from self-serve billing.
       </p>
 
     </div>
