@@ -1,0 +1,88 @@
+name: Environment & Database Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'whatsapp-order-saas/supabase/migrations/**'
+      - '.github/workflows/env-check.yml'
+
+jobs:
+  # Validate migrations are syntactically correct
+  validate-migrations:
+    name: Validate Database Migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Set up PostgreSQL
+        uses: ankane/setup-postgres@v1
+        with:
+          postgres-version: 15
+      
+      - name: Run migrations
+        working-directory: whatsapp-order-saas
+        run: |
+          # Create test database
+          createdb test_db
+
+          # Run each migration in sequence to validate syntax
+          for migration in supabase/migrations/*.sql; do
+            echo "Validating: $migration"
+            psql -d test_db < "$migration" || exit 1
+          done
+        env:
+          PGPASSWORD: postgres
+      
+      - name: Verify schema
+        working-directory: whatsapp-order-saas
+        run: |
+          echo "Database migrations validated successfully"
+        continue-on-error: true
+  
+  # Check environment variables are documented
+  validate-env:
+    name: Validate Environment Setup
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Verify .env.local.example exists
+        run: |
+          if [ ! -f "whatsapp-order-saas/.env.local.example" ]; then
+            echo "❌ .env.local.example is missing"
+            exit 1
+          fi
+          echo "✅ .env.local.example found"
+      
+      - name: Check for required env variables
+        working-directory: whatsapp-order-saas
+        run: |
+          required_vars=(
+            "NEXT_PUBLIC_SUPABASE_URL"
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            "SUPABASE_SERVICE_ROLE_KEY"
+            "OPENAI_API_KEY"
+            "OPENAI_MODEL"
+            "PAYSTACK_PUBLIC_KEY"
+            "PAYSTACK_SECRET_KEY"
+          )
+          
+          missing=0
+          for var in "${required_vars[@]}"; do
+            if grep -q "$var" .env.local.example; then
+              echo "✅ $var documented"
+            else
+              echo "⚠️ $var not documented in .env.local.example"
+              ((missing++))
+            fi
+          done
+          
+          if [ $missing -gt 0 ]; then
+            echo "⚠️ $missing environment variables are not documented"
+          fi

@@ -1,0 +1,184 @@
+name: Testing (Template - Enable When Tests Added)
+
+# This workflow is a template for when automated tests are added to the project.
+# Currently disabled because no test suite exists yet.
+
+on:
+  workflow_dispatch:  # Manual trigger only for now
+  push:
+    branches: [develop]
+    paths:
+      - 'whatsapp-order-saas/**/*.test.ts'
+      - 'whatsapp-order-saas/**/*.test.tsx'
+      - 'whatsapp-order-saas/jest.config.js'
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Unit and Integration Tests
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'whatsapp-order-saas/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: whatsapp-order-saas
+        run: npm ci
+      
+      - name: Run unit tests
+        working-directory: whatsapp-order-saas
+        run: npm run test -- --coverage --watchAll=false
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+      
+      - name: Upload coverage reports
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./whatsapp-order-saas/coverage/coverage-final.json
+          fail_ci_if_error: false
+          verbose: true
+      
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lcov-file: ./whatsapp-order-saas/coverage/lcov.info
+
+  # End-to-End Tests (API integration)
+  e2e:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'whatsapp-order-saas/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: whatsapp-order-saas
+        run: npm ci
+      
+      - name: Build application
+        working-directory: whatsapp-order-saas
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+      
+      - name: Run E2E tests
+        working-directory: whatsapp-order-saas
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+          TEST_USER_EMAIL: test@example.com
+          TEST_USER_PASSWORD: Test123!@#
+      
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: e2e-test-results
+          path: whatsapp-order-saas/test-results/
+
+  # Test Coverage Threshold
+  coverage-check:
+    name: Check Coverage Threshold
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    
+    steps:
+      - name: Check coverage threshold (>= 80%)
+        run: |
+          echo "Checking code coverage threshold..."
+          # This step would parse coverage reports and fail if threshold not met
+          # Placeholder for now - implement when test setup is complete
+
+  # Performance / Load Tests (Optional)
+  performance:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'perf-test')
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'whatsapp-order-saas/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: whatsapp-order-saas
+        run: npm ci
+      
+      - name: Build for performance test
+        working-directory: whatsapp-order-saas
+        run: npm run build
+      
+      - name: Run performance benchmarks
+        working-directory: whatsapp-order-saas
+        run: npm run test:perf || true
+        continue-on-error: true
+      
+      - name: Comment performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📊 Performance test results available in action logs'
+            })
