@@ -1,0 +1,13 @@
+# Workspace-level ignores
+node_modules/
+**/node_modules/
+
+# Local tooling state
+.claude/settings.local.json
+.vscode/
+**/supabase/.temp/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
