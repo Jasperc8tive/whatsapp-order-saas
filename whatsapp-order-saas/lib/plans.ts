@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type PlanId = "starter" | "growth" | "pro";
 
 export interface Plan {
@@ -56,8 +58,10 @@ export const DEFAULT_PLAN: PlanId = "starter";
 /**
  * Returns how many orders this vendor has created in the current calendar month.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getMonthOrderCount(supabase: any, vendorId: string): Promise<number> {
+export async function getMonthOrderCount(
+  supabase: SupabaseClient,
+  vendorId: string
+): Promise<number> {
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -81,8 +85,7 @@ export async function getMonthOrderCount(supabase: any, vendorId: string): Promi
  * Returns { allowed: true } or { allowed: false, reason: string }.
  */
 export async function checkPlanLimit(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: SupabaseClient,
   vendorId: string,
   plan: PlanId
 ): Promise<{ allowed: boolean; reason?: string; used?: number; limit?: number | null }> {

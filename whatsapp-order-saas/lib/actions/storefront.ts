@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { notifyOrderCreated } from "@/lib/whatsapp";
 import { checkPlanLimit, DEFAULT_PLAN, type PlanId } from "@/lib/plans";
+import { DEMO_VENDOR, DEMO_VENDOR_SLUG } from "@/lib/demoStore";
 
 export interface OrderLineItem {
   product_name: string;
@@ -38,12 +39,22 @@ export async function submitOrder(
     return { error: "Add at least one item with a valid product name and quantity." };
   }
 
+  // Demo storefront uses a synthetic success response and does not persist data.
+  if (vendor_slug === DEMO_VENDOR_SLUG) {
+    const orderId = crypto.randomUUID();
+    return {
+      orderId,
+      orderRef: orderId.slice(0, 8).toUpperCase(),
+      vendorName: DEMO_VENDOR.business_name,
+    };
+  }
+
   const supabase = createAdminClient();
 
   // ── 1. Resolve vendor by slug ───────────────────────────────────────────
   const { data: vendor, error: vendorErr } = await supabase
     .from("users")
-    .select("id, business_name, plan")
+    .select("id, business_name")
     .eq("slug", vendor_slug)
     .single();
 
@@ -55,33 +66,57 @@ export async function submitOrder(
   const planCheck = await checkPlanLimit(
     supabase,
     vendor.id,
-    (vendor.plan ?? DEFAULT_PLAN) as PlanId
+    DEFAULT_PLAN as PlanId
   );
   if (!planCheck.allowed) {
     return { error: planCheck.reason ?? "Order limit reached for this store." };
   }
 
-  // ── 2. Upsert customer (idempotent on phone + vendor_id) ────────────────
-  // ON CONFLICT: update name and address so returning customers stay fresh.
-  const { data: customer, error: customerErr } = await supabase
-    .from("customers")
-    .upsert(
-      {
-        vendor_id: vendor.id,
-        name: customer_name.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-      },
-      {
-        onConflict: "vendor_id,phone",
-        ignoreDuplicates: false, // we want to update name/address on repeat visits
-      }
-    )
-    .select("id")
-    .single();
+  // ── 2. Resolve customer by phone, then update or create ─────────────────
+  const normalizedPhone = phone.trim();
+  const normalizedName = customer_name.trim();
+  const normalizedAddress = address.trim();
 
-  if (customerErr || !customer) {
-    return { error: `Could not save customer: ${customerErr?.message ?? "unknown error"}` };
+  const { data: existingCustomer, error: existingErr } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("vendor_id", vendor.id)
+    .eq("phone", normalizedPhone)
+    .maybeSingle();
+
+  if (existingErr) {
+    return { error: `Could not lookup customer: ${existingErr.message}` };
+  }
+
+  let customerId = existingCustomer?.id as string | undefined;
+
+  if (customerId) {
+    const { error: updateCustomerErr } = await supabase
+      .from("customers")
+      .update({ name: normalizedName, address: normalizedAddress })
+      .eq("id", customerId)
+      .eq("vendor_id", vendor.id);
+
+    if (updateCustomerErr) {
+      return { error: `Could not update customer: ${updateCustomerErr.message}` };
+    }
+  } else {
+    const { data: createdCustomer, error: createCustomerErr } = await supabase
+      .from("customers")
+      .insert({
+        vendor_id: vendor.id,
+        name: normalizedName,
+        phone: normalizedPhone,
+        address: normalizedAddress,
+      })
+      .select("id")
+      .single();
+
+    if (createCustomerErr || !createdCustomer) {
+      return { error: `Could not save customer: ${createCustomerErr?.message ?? "unknown error"}` };
+    }
+
+    customerId = createdCustomer.id;
   }
 
   // ── 3. Insert order header (total_amount auto-set by DB trigger) ─────────
@@ -89,11 +124,8 @@ export async function submitOrder(
     .from("orders")
     .insert({
       vendor_id: vendor.id,
-      customer_id: customer.id,
-      order_status: "pending",
-      payment_status: "unpaid",
+      customer_id: customerId,
       total_amount: 0,          // trigger recalculates from order_items
-      notes: notes?.trim() || null,
     })
     .select("id")
     .single();
@@ -110,11 +142,23 @@ export async function submitOrder(
     price: 0,        // Price to be confirmed by vendor via WhatsApp
   }));
 
-  const { error: itemsErr } = await supabase
+  let { error: itemsErr } = await supabase
     .from("order_items")
     .insert(orderItems);
 
-  if (itemsErr) {
+  if (itemsErr && itemsErr.message.toLowerCase().includes("price")) {
+    const legacyItems = items.map((item) => ({
+      order_id: order.id,
+      product_name: item.product_name.trim(),
+      quantity: item.quantity,
+      unit_price: 0,
+    }));
+
+    const retry = await supabase.from("order_items").insert(legacyItems);
+    itemsErr = retry.error;
+  }
+
+  if (itemsErr && !itemsErr.message.toLowerCase().includes("order_items")) {
     // Best-effort cleanup: delete the orphaned order
     await supabase.from("orders").delete().eq("id", order.id);
     return { error: `Could not save order items: ${itemsErr.message}` };

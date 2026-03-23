@@ -5,11 +5,8 @@ export interface Customer {
   phone: string;
   email?: string;
   address?: string;
-  total_orders: number;
-  total_spent: number;
-  last_order_at?: string;
   created_at: string;
   updated_at: string;
 }
 
-export type CreateCustomerPayload = Omit<Customer, "id" | "total_orders" | "total_spent" | "last_order_at" | "created_at" | "updated_at">;
+export type CreateCustomerPayload = Omit<Customer, "id" | "created_at" | "updated_at">;

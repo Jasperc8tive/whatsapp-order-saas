@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { ensureVendorProfile } from "@/lib/vendorProfile";
 
 export type AuthState = {
   error?: string;
@@ -61,7 +62,7 @@ export async function signUp(
     email,
     password,
     options: {
-      data: { business_name },    // stored in auth.users.raw_user_meta_data
+      data: { business_name, phone },    // stored in auth.users.raw_user_meta_data
       emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback`,
     },
   });
@@ -72,13 +73,14 @@ export async function signUp(
   // If email confirmation is enabled, data.user exists but data.session is null.
   // We still create the profile now so the callback redirect lands correctly.
   if (data.user) {
-    const { error: profileError } = await supabase
-      .from("users")
-      .insert({ id: data.user.id, business_name, email, phone, slug });
-
-    if (profileError && profileError.code !== "23505") {
-      // 23505 = unique_violation (user already has a profile — idempotent re-signup)
-      return { error: profileError.message };
+    try {
+      await ensureVendorProfile({
+        ...data.user,
+        email,
+        user_metadata: { ...data.user.user_metadata, business_name, phone, slug },
+      });
+    } catch (profileError) {
+      return { error: profileError instanceof Error ? profileError.message : "Could not create vendor profile." };
     }
   }
 
@@ -101,4 +103,46 @@ export async function signOut(): Promise<never> {
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
   redirect("/login");
+}
+
+// ── Reset Password (send email) ──────────────────────────────────────────────
+export async function resetPassword(
+  _prevState: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const supabase = await createServerSupabaseClient();
+  const email = (formData.get("email") as string)?.trim();
+
+  if (!email) return { error: "Email is required." };
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/reset-password`,
+  });
+
+  if (error) return { error: error.message };
+
+  return { message: "Check your email for a password reset link." };
+}
+
+// ── Update Password (after clicking reset link) ──────────────────────────────
+export async function updatePassword(
+  _prevState: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const supabase = await createServerSupabaseClient();
+  const password        = formData.get("password")        as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+  if (password !== confirmPassword) {
+    return { error: "Passwords do not match." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
 }
