@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { getDashboardStats, getRecentOrders } from "@/lib/analytics";
@@ -131,9 +132,9 @@ export default async function DashboardPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">Recent Orders</h2>
-          <a href="/dashboard/orders" className="text-xs text-green-600 font-medium hover:underline">
+          <Link href="/dashboard/orders" className="text-xs text-green-600 font-medium hover:underline">
             View all →
-          </a>
+          </Link>
         </div>
 
         {recentOrders.length === 0 ? (

@@ -14,6 +14,13 @@ interface OrderFormProps {
   vendorSlug: string;
   vendorName: string;
   vendorPhone?: string | null;
+  products?: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    price: number;
+    image_url?: string | null;
+  }>;
 }
 
 const emptyItem = (): OrderLineItem => ({ product_name: "", quantity: 1 });
@@ -92,7 +99,7 @@ function OrderConfirmation({
 }
 
 // ── Main form ─────────────────────────────────────────────────────────────────
-export default function OrderForm({ vendorSlug, vendorName, vendorPhone }: OrderFormProps) {
+export default function OrderForm({ vendorSlug, vendorName, vendorPhone, products }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
   const [confirmation, setConfirmation] = useState<SubmitOrderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -227,6 +234,70 @@ export default function OrderForm({ vendorSlug, vendorName, vendorPhone }: Order
           </div>
         </div>
       </fieldset>
+
+      {/* ── Section: Product catalogue (if vendor has products set up) ── */}
+      {products && products.length > 0 && (
+        <fieldset>
+          <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Menu / Catalogue
+          </legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {products.map((p) => {
+              const existingIdx = items.findIndex((i) => i.product_name === p.name);
+              const qty = existingIdx >= 0 ? items[existingIdx].quantity : 0;
+
+              function increment() {
+                if (existingIdx >= 0) {
+                  updateItem(existingIdx, "quantity", qty + 1);
+                } else {
+                  setItems((prev) => [...prev.filter((i) => i.product_name !== ""), { product_name: p.name, quantity: 1 }]);
+                }
+              }
+              function decrement() {
+                if (existingIdx < 0) return;
+                if (qty <= 1) {
+                  setItems((prev) => prev.filter((_, i) => i !== existingIdx));
+                } else {
+                  updateItem(existingIdx, "quantity", qty - 1);
+                }
+              }
+
+              return (
+                <div key={p.id} className="flex gap-3 bg-gray-50 rounded-xl border border-gray-200 p-3 items-center">
+                  {p.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.image_url} alt={p.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                    {p.description && <p className="text-xs text-gray-500 truncate">{p.description}</p>}
+                    <p className="text-sm font-bold text-green-700 mt-0.5">
+                      {p.price > 0 ? `₦${p.price.toLocaleString("en-NG")}` : "Price on request"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {qty > 0 ? (
+                      <>
+                        <button type="button" onClick={decrement}
+                          className="w-7 h-7 rounded-full border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 flex items-center justify-center text-sm font-bold leading-none">−</button>
+                        <span className="w-5 text-center text-sm font-semibold text-gray-800">{qty}</span>
+                        <button type="button" onClick={increment}
+                          className="w-7 h-7 rounded-full bg-green-600 text-white hover:bg-green-700 flex items-center justify-center text-sm font-bold leading-none">+</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={increment}
+                        className="px-3 py-1.5 rounded-full bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition-colors">
+                        Add
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Or type a custom item below ↓</p>
+        </fieldset>
+      )}
 
       {/* ── Section: Order items ── */}
       <fieldset>

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
-import Sidebar from "@/components/Sidebar";
-import Navbar from "@/components/Navbar";
+import DashboardShell from "@/components/DashboardShell";
+import { ensureVendorProfile } from "@/lib/vendorProfile";
 
 export default async function DashboardLayout({
   children,
@@ -10,7 +10,6 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createServerSupabaseClient();
 
-  // getUser() validates the JWT server-side — never trust getSession() alone
   const {
     data: { user },
     error: userError,
@@ -20,20 +19,24 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // Fetch the vendor's profile from the public.users table
-  const { data: vendor } = await supabase
+  const { data: vendorRow } = await supabase
     .from("users")
-    .select("business_name, plan, slug, whatsapp_number")
+    .select("business_name, slug, phone")
     .eq("id", user.id)
     .single();
 
+  let vendor = vendorRow
+    ? { ...vendorRow, plan: "starter" }
+    : null;
+
+  if (!vendor) {
+    const ensuredVendor = await ensureVendorProfile(user);
+    vendor = { ...ensuredVendor, plan: "starter" };
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar vendor={vendor} />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Navbar title="Dashboard" vendorName={vendor?.business_name} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
-    </div>
+    <DashboardShell vendor={vendor}>
+      {children}
+    </DashboardShell>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import KanbanCard from "./KanbanCard";
 import type { Order, OrderStatus } from "@/types/order";
 
@@ -18,10 +19,16 @@ interface KanbanColumnProps {
   config: ColumnConfig;
   orders: Order[];
   isAnyDragging: boolean;
+  onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
+  updatingIds?: Set<string>;
 }
 
-export default function KanbanColumn({ config, orders, isAnyDragging }: KanbanColumnProps) {
+export default function KanbanColumn({ config, orders, isAnyDragging, onStatusChange, updatingIds }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: config.id });
+  const [cardsParentRef] = useAutoAnimate<HTMLDivElement>({
+    duration: 220,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  });
 
   return (
     <div className="flex flex-col flex-shrink-0 w-72">
@@ -50,34 +57,43 @@ export default function KanbanColumn({ config, orders, isAnyDragging }: KanbanCo
             : "border-2 border-dashed border-transparent",
         ].join(" ")}
       >
-        {orders.length === 0 ? (
-          <div
-            className={[
-              "flex flex-col items-center justify-center h-24 rounded-lg text-xs font-medium transition-colors",
-              isOver ? "text-gray-500" : "text-gray-300",
-            ].join(" ")}
-          >
-            {isOver ? (
-              <>
-                <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Drop here
-              </>
-            ) : (
-              "No orders"
-            )}
-          </div>
-        ) : (
-          orders.map((order) => <KanbanCard key={order.id} order={order} />)
-        )}
+        <div ref={cardsParentRef} className="space-y-3">
+          {orders.length === 0 ? (
+            <div
+              className={[
+                "flex flex-col items-center justify-center h-24 rounded-lg text-xs font-medium transition-colors",
+                isOver ? "text-gray-500" : "text-gray-300",
+              ].join(" ")}
+            >
+              {isOver ? (
+                <>
+                  <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Drop here
+                </>
+              ) : (
+                "No orders"
+              )}
+            </div>
+          ) : (
+            orders.map((order) => (
+              <KanbanCard
+                key={order.id}
+                order={order}
+                onStatusChange={onStatusChange}
+                isPending={updatingIds?.has(order.id)}
+              />
+            ))
+          )}
 
-        {/* Extra drop target at the bottom when column has cards */}
-        {orders.length > 0 && isOver && (
-          <div className="h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
-            <span className="text-xs text-gray-400 font-medium">Drop here</span>
-          </div>
-        )}
+          {/* Extra drop target at the bottom when column has cards */}
+          {orders.length > 0 && isOver && (
+            <div className="h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+              <span className="text-xs text-gray-400 font-medium">Drop here</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

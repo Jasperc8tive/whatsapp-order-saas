@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import OrderForm from "@/components/storefront/OrderForm";
+import { DEMO_PRODUCTS, DEMO_VENDOR, DEMO_VENDOR_SLUG } from "@/lib/demoStore";
 
 interface Props {
   params: { vendor: string };
@@ -9,6 +10,12 @@ interface Props {
 
 // ── Dynamic metadata ─────────────────────────────────────────────────────────
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  if (params.vendor === DEMO_VENDOR_SLUG) {
+    return {
+      title: `Order from ${DEMO_VENDOR.business_name} — OrderFlow`,
+    };
+  }
+
   const supabase = await createServerSupabaseClient();
   const { data } = await supabase
     .from("users")
@@ -27,11 +34,71 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function VendorOrderPage({ params }: Props) {
   const supabase = await createServerSupabaseClient();
 
-  const { data: vendor } = await supabase
-    .from("users")
-    .select("id, business_name, slug, whatsapp_number, logo_url")
-    .eq("slug", params.vendor)
-    .single();
+  let vendor: {
+    id: string;
+    business_name: string;
+    slug: string;
+    phone: string | null;
+  } | null = null;
+
+  let products: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    price: number;
+    image_url?: string | null;
+  }> = [];
+
+  if (params.vendor === DEMO_VENDOR_SLUG) {
+    vendor = DEMO_VENDOR;
+    products = DEMO_PRODUCTS;
+  } else {
+    const { data: dbVendor } = await supabase
+      .from("users")
+      .select("id, business_name, slug, phone")
+      .eq("slug", params.vendor)
+      .single();
+
+    vendor = dbVendor;
+
+    if (vendor) {
+      let { data: dbProducts, error: dbProductsError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("vendor_id", vendor.id)
+        .eq("is_active", true)
+        .order("name");
+
+      if (dbProductsError && dbProductsError.message.toLowerCase().includes("vendor_id")) {
+        const retry = await supabase
+          .from("products")
+          .select("*")
+          .eq("owner_id", vendor.id)
+          .eq("is_active", true)
+          .order("name");
+        dbProducts = retry.data;
+        dbProductsError = retry.error;
+      }
+
+      if (dbProductsError) {
+        console.error("[VendorOrderPage] products fetch error:", dbProductsError);
+      }
+
+      products = (dbProducts ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: Number((
+          p.price ??
+          p.unit_price ??
+          (p as Record<string, unknown>).amount ??
+          (p as Record<string, unknown>).product_price ??
+          (p as Record<string, unknown>).selling_price ??
+          (p as Record<string, unknown>).price_ngn ??
+          0
+        ) as number),
+      }));
+    }
+  }
 
   if (!vendor) notFound();
 
@@ -48,18 +115,21 @@ export default async function VendorOrderPage({ params }: Props) {
 
         {/* Vendor header card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-4 text-center">
-          {vendor.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={vendor.logo_url}
-              alt={vendor.business_name}
-              className="w-16 h-16 rounded-2xl object-cover mx-auto mb-3"
-            />
-          ) : (
-            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <span className="text-xl font-bold text-white">{initials}</span>
+          {params.vendor === DEMO_VENDOR_SLUG && (
+            <div className="mb-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Demo Store
+              </div>
+              <p className="text-[11px] text-amber-700/80 mt-1.5">
+                Orders here are simulated and are not saved to a real vendor account.
+              </p>
             </div>
           )}
+
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <span className="text-xl font-bold text-white">{initials}</span>
+          </div>
           <h1 className="text-xl font-bold text-gray-900">{vendor.business_name}</h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center justify-center gap-1.5">
             <svg className="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
@@ -75,7 +145,8 @@ export default async function VendorOrderPage({ params }: Props) {
           <OrderForm
             vendorSlug={vendor.slug}
             vendorName={vendor.business_name}
-            vendorPhone={vendor.whatsapp_number}
+            vendorPhone={vendor.phone}
+            products={products}
           />
         </div>
 

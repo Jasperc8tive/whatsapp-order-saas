@@ -1,4 +1,5 @@
 import KanbanBoard from "@/components/KanbanBoard";
+import NewOrderModal from "@/components/NewOrderModal";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import type { Order, OrderStatus } from "@/types/order";
 
@@ -76,39 +77,66 @@ export default async function OrdersPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let orders: Order[] = SEED_ORDERS;
+  let orders: Order[] = [];
 
   if (user) {
-    const { data, error } = await supabase
+    const { data: orderRows, error } = await supabase
       .from("orders")
-      .select(
-        `id,
-         order_status,
-         total_amount,
-         created_at,
-         updated_at,
-         customer_id,
-         customers ( name, phone ),
-         order_items ( id, product_name, quantity, price )`
-      )
+      .select("*")
       .eq("vendor_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
-      orders = data.map((row) => {
-        const customer = (row.customers as unknown) as { name: string; phone: string } | null;
-        const items = (
-          (row.order_items as unknown) as Array<{ id: string; product_name: string; quantity: number; price: number }>
-        ) ?? [];
+    if (!error && orderRows) {
+      const customerIds = Array.from(
+        new Set(
+          orderRows
+            .map((row) => (row.customer_id as string | null) ?? null)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      const { data: customers } = customerIds.length
+        ? await supabase
+            .from("customers")
+            .select("id, name, phone")
+            .in("id", customerIds)
+        : { data: [] as Array<{ id: string; name: string; phone: string }> };
+
+      const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
+
+      const orderIds = orderRows.map((row) => row.id as string);
+      const { data: itemRows } = orderIds.length
+        ? await supabase
+            .from("order_items")
+            .select("id, order_id, product_name, quantity, price")
+            .in("order_id", orderIds)
+        : { data: [] as Array<{ id: string; order_id: string; product_name: string; quantity: number; price: number }> };
+
+      const itemsByOrderId = new Map<string, Array<{ id: string; product_name: string; quantity: number; price: number }>>();
+      for (const item of itemRows ?? []) {
+        const list = itemsByOrderId.get(item.order_id) ?? [];
+        list.push({
+          id: item.id,
+          product_name: item.product_name,
+          quantity: item.quantity,
+          price: Number((item.price ?? (item as Record<string, unknown>).unit_price ?? 0) as number),
+        });
+        itemsByOrderId.set(item.order_id, list);
+      }
+
+      orders = orderRows.map((row) => {
+        const customerId = (row.customer_id as string | null) ?? "";
+        const customer = customerById.get(customerId);
+        const items = itemsByOrderId.get(row.id as string) ?? [];
 
         return {
           id: row.id,
           vendor_id: user.id,
-          customer_id: (row.customer_id as string | null) ?? "",
+          customer_id: customerId,
           customer_name: customer?.name ?? "Unknown Customer",
           customer_phone: customer?.phone ?? "",
-          status: row.order_status as OrderStatus,
-          total_amount: Number(row.total_amount),
+          status: ((row.order_status ?? row.status) as OrderStatus) ?? "pending",
+          total_amount: Number((row.total_amount ?? row.total ?? 0) as number),
           items: items.map((item) => ({
             id: item.id,
             product_name: item.product_name,
@@ -120,6 +148,9 @@ export default async function OrdersPage() {
         } satisfies Order;
       });
     }
+  } else {
+    // Fallback seed is only for unauthenticated local/demo rendering.
+    orders = SEED_ORDERS;
   }
 
   return (
@@ -131,12 +162,10 @@ export default async function OrdersPage() {
             Drag cards between columns to update order status
           </p>
         </div>
-        <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          + New Order
-        </button>
+        <NewOrderModal vendorId={user?.id ?? ""} />
       </div>
 
-      <KanbanBoard initialOrders={orders} />
+      <KanbanBoard initialOrders={orders} vendorId={user?.id ?? ""} />
     </div>
   );
 }
