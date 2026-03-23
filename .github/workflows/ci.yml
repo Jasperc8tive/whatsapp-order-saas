@@ -37,12 +37,10 @@ jobs:
       - name: Lint code
         working-directory: whatsapp-order-saas
         run: npm run lint -- --max-warnings 0
-        continue-on-error: true
       
       - name: Type check
         working-directory: whatsapp-order-saas
         run: npx tsc --noEmit
-        continue-on-error: true
       
       - name: Build application
         working-directory: whatsapp-order-saas
@@ -71,7 +69,7 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: whatsapp-order-saas
-          production: true
+          vercel-args: '--prod'
       
       - name: Notify deployment success
         if: success()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   retryAllDeadJobs,
@@ -31,14 +31,14 @@ export default function QueueHealthClient({ initialData, error }: Props) {
     setTimeout(() => setToast(null), 2500);
   }
 
-  function updateQuery(next: {
+  const updateQuery = useCallback((next: {
     page?: number;
     pageSize?: number;
     status?: QueueStatusFilter;
     q?: string;
     sortBy?: QueueSortBy;
     sortDir?: QueueSortDir;
-  }) {
+  }) => {
     const params = new URLSearchParams(searchParams.toString());
 
     if (next.page !== undefined) {
@@ -69,7 +69,7 @@ export default function QueueHealthClient({ initialData, error }: Props) {
     }
 
     router.push(`${pathname}?${params.toString()}`);
-  }
+  }, [pathname, router, searchParams]);
 
   function onSort(column: QueueSortBy) {
     const currentBy = initialData.applied.sortBy;
@@ -143,7 +143,7 @@ export default function QueueHealthClient({ initialData, error }: Props) {
       updateQuery({ q: searchInput });
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [searchInput, initialData.applied.search]);
+  }, [searchInput, initialData.applied.search, updateQuery]);
 
   // Debounced page jump: update URL while typing page number.
   useEffect(() => {
@@ -160,7 +160,7 @@ export default function QueueHealthClient({ initialData, error }: Props) {
       updateQuery({ page: bounded });
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [pageInput, page, totalPages]);
+  }, [pageInput, page, totalPages, updateQuery]);
 
   const statCard = (label: string, value: number, color: string) => (
     <div className="bg-white border border-gray-200 rounded-xl p-4">

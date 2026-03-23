@@ -194,7 +194,7 @@ export default function AiCapturePageClient({
         <div>
           <h2 className="text-base font-semibold text-gray-800">Product Aliases</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Map customer phrases to products (e.g. "shawarma" → Chicken Shawarma).
+            Map customer phrases to products (e.g. &quot;shawarma&quot; → Chicken Shawarma).
             Aliases improve AI accuracy significantly.
           </p>
         </div>
