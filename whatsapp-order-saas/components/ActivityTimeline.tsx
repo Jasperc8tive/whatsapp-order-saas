@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 
 interface Activity {
@@ -35,7 +35,7 @@ export default function ActivityTimeline({
   const [filters, setFilters] = useState<ActivityFilters>(initialFilters);
   const [error, setError] = useState<string | null>(null);
 
-  async function fetchActivities() {
+  const fetchActivities = useCallback(async () => {
     if (!vendorId) return;
 
     setLoading(true);
@@ -60,11 +60,11 @@ export default function ActivityTimeline({
     } finally {
       setLoading(false);
     }
-  }
+  }, [vendorId, filters]);
 
   useEffect(() => {
     fetchActivities();
-  }, [vendorId, filters]);
+  }, [fetchActivities]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function ActivityTimeline({
 
     const interval = setInterval(fetchActivities, 30000);
     return () => clearInterval(interval);
-  }, [vendorId, filters, autoRefresh]);
+  }, [fetchActivities, autoRefresh]);
 
   const actionIcons: Record<string, string> = {
     created: "✨",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
+import Image from "next/image";
 import { useFormStatus } from "react-dom";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -114,8 +115,8 @@ function ProductForm({
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Product Image</label>
         {imageUrl && (
-          <div className="mb-3 relative">
-            <img src={imageUrl} alt="Product preview" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+          <div className="mb-3 relative h-32">
+            <Image src={imageUrl} alt="Product preview" fill unoptimized className="object-cover rounded-lg border border-gray-200" />
             <button
               type="button"
               onClick={() => {
@@ -182,9 +183,9 @@ function ProductCard({ product }: { product: Product }) {
   return (
     <div className={`bg-white rounded-xl border p-4 flex gap-4 ${!product.is_active ? "opacity-60" : "border-gray-200"}`}>
       {/* Image or placeholder */}
-      <div className="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 overflow-hidden">
+      <div className="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 overflow-hidden relative">
         {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+          <Image src={product.image_url} alt={product.name} fill unoptimized className="object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
