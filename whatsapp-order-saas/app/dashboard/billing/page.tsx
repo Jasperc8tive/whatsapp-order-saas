@@ -180,7 +180,7 @@ function UsageMeter({ used, limit, planName }: UsageMeterProps) {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams?: { upgraded?: string; error?: string };
+  searchParams?: Promise<{ upgraded?: string; error?: string }>;
 }) {
   const supabase = await createServerSupabaseClient();
   const {
@@ -210,19 +210,20 @@ export default async function BillingPage({
 
   const planOrder: PlanId[] = ["starter", "growth", "pro"];
   const rank = (plan: PlanId) => planOrder.indexOf(plan);
+  const resolvedSearchParams = await searchParams;
 
   return (
     <div className="space-y-6 max-w-4xl">
 
-      {searchParams?.upgraded && searchParams.upgraded in PLANS && (
+      {resolvedSearchParams?.upgraded && resolvedSearchParams.upgraded in PLANS && (
         <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl px-4 py-3">
-          Plan updated successfully to <span className="font-semibold">{PLANS[searchParams.upgraded as PlanId].name}</span>.
+          Plan updated successfully to <span className="font-semibold">{PLANS[resolvedSearchParams.upgraded as PlanId].name}</span>.
         </div>
       )}
 
-      {searchParams?.error && (
+      {resolvedSearchParams?.error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-          {decodeURIComponent(searchParams.error)}
+          {decodeURIComponent(resolvedSearchParams.error)}
         </div>
       )}
 

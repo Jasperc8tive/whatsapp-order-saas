@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { enqueueJob } from "@/lib/jobs";
+import { requireEnvValue } from "@/lib/env";
 
 /**
  * GET /api/whatsapp/webhook
@@ -19,9 +20,14 @@ export async function GET(request: Request) {
   const token     = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (!verifyToken) {
-    console.error("[whatsapp/webhook] WHATSAPP_WEBHOOK_VERIFY_TOKEN not set.");
+  let verifyToken: string;
+  try {
+    verifyToken = requireEnvValue(
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+      "WHATSAPP_WEBHOOK_VERIFY_TOKEN"
+    );
+  } catch (err) {
+    console.error("[whatsapp/webhook]", err instanceof Error ? err.message : String(err));
     return new Response("Server misconfiguration.", { status: 500 });
   }
 
@@ -50,9 +56,14 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
 
   // 2. Verify HMAC-SHA256 signature
-  const appSecret = process.env.WHATSAPP_APP_SECRET;
-  if (!appSecret) {
-    console.error("[whatsapp/webhook] WHATSAPP_APP_SECRET not set.");
+  let appSecret: string;
+  try {
+    appSecret = requireEnvValue(
+      process.env.WHATSAPP_APP_SECRET,
+      "WHATSAPP_APP_SECRET"
+    );
+  } catch (err) {
+    console.error("[whatsapp/webhook]", err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: "Server misconfiguration." }, { status: 500 });
   }
 

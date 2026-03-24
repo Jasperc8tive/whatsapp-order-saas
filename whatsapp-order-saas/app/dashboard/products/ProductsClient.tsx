@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { formatCurrency } from "@/lib/utils";
 import {
   createProduct,
@@ -16,6 +16,7 @@ interface Product {
   name: string;
   price: number;
   is_active: boolean;
+  image_url?: string | null;
   created_at: string;
 }
 
@@ -37,16 +38,64 @@ function ProductForm({
   onClose: () => void;
   editing?: Product;
 }) {
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState(editing?.image_url || "");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
   const action = editing
     ? updateProduct.bind(null, editing.id)
     : createProduct;
 
-  const [state, formAction] = useFormState<ProductActionState, FormData>(action, {});
+  const [state, formAction] = useActionState<ProductActionState, FormData>(action, {});
 
   if (state.success) { onClose(); return null; }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageFile(file);
+    setIsUploadingImage(true);
+
+    try {
+      // Create a FormData to send file to our upload endpoint
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+
+      const response = await fetch("/api/upload-product-image", {
+        method: "POST",
+        body: uploadFormData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert("Failed to upload image: " + (error.message || "Unknown error"));
+        setImageFile(null);
+        setIsUploadingImage(false);
+        return;
+      }
+
+      const data = await response.json();
+      setImageUrl(data.imageUrl);
+    } catch (error) {
+      console.error("Image upload error:", error);
+      alert("Failed to upload image");
+      setImageFile(null);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }
+
+  async function handleFormSubmit(formDataToSubmit: FormData) {
+    // Add the image URL to the form data
+    if (imageUrl) {
+      formDataToSubmit.set("imageUrl", imageUrl);
+    }
+    formAction(formDataToSubmit);
+  }
+
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={handleFormSubmit} className="space-y-4">
       {state.error && (
         <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{state.error}</p>
       )}
@@ -61,6 +110,35 @@ function ProductForm({
         <input name="price" type="number" min="0" step="0.01"
           defaultValue={editing?.price ?? 0}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Product Image</label>
+        {imageUrl && (
+          <div className="mb-3 relative">
+            <img src={imageUrl} alt="Product preview" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+            <button
+              type="button"
+              onClick={() => {
+                setImageUrl("");
+                setImageFile(null);
+              }}
+              className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          disabled={isUploadingImage}
+          className="w-full text-sm text-gray-500
+            file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-gray-200
+            file:text-sm file:font-medium file:bg-gray-50 file:text-gray-700
+            hover:file:bg-gray-100 disabled:opacity-50"
+        />
+        {isUploadingImage && <p className="text-xs text-gray-500 mt-2">Uploading image...</p>}
       </div>
       <div className="flex gap-3 pt-1">
         <button type="button" onClick={onClose}
@@ -105,11 +183,15 @@ function ProductCard({ product }: { product: Product }) {
     <div className={`bg-white rounded-xl border p-4 flex gap-4 ${!product.is_active ? "opacity-60" : "border-gray-200"}`}>
       {/* Image or placeholder */}
       <div className="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 overflow-hidden">
-        <div className="w-full h-full flex items-center justify-center">
-          <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-w-0">

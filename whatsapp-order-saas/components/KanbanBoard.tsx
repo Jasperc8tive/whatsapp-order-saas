@@ -261,6 +261,7 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
               key={config.id}
               config={config}
               orders={orders.filter((o) => o.status === config.id)}
+              workspaceId={vendorId}
               isAnyDragging={activeOrder !== null}
               onStatusChange={handleStatusChange}
               updatingIds={updatingIds}

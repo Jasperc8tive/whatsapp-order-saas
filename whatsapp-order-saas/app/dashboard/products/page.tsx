@@ -47,6 +47,7 @@ export default async function ProductsPage() {
       0
     ) as number),
     is_active: Boolean((p.is_active ?? true) as boolean),
+    image_url: (p.image_url as string | null | undefined) ?? undefined,
     created_at: (p.created_at as string) ?? new Date(0).toISOString(),
   }));
 

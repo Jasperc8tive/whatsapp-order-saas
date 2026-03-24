@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { signIn, type AuthState } from "@/lib/auth";
 import { useSearchParams } from "next/navigation";
@@ -32,7 +33,7 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const urlError     = searchParams.get("error");
 
-  const [state, formAction] = useFormState<AuthState, FormData>(signIn, null);
+  const [state, formAction] = useActionState<AuthState, FormData>(signIn, null);
 
   const errorMessage = state?.error ?? urlError;
 

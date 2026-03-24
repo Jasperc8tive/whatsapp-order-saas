@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { updateSettings, type SettingsState } from "@/lib/actions/settings";
 
 interface SettingsFormProps {
@@ -30,7 +31,7 @@ function SaveButton() {
 }
 
 export default function SettingsForm({ businessName, slug, siteOrigin, whatsappNumber }: SettingsFormProps) {
-  const [state, formAction] = useFormState<SettingsState, FormData>(updateSettings, {});
+  const [state, formAction] = useActionState<SettingsState, FormData>(updateSettings, {});
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">

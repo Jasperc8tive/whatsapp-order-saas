@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "OrderFlow — WhatsApp Order Management",
+  title: "WhatsOrder — WhatsApp Order Management",
   description: "Manage WhatsApp orders for your business",
 };
 

@@ -7,7 +7,7 @@ import { sendTextMessage } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_QUEUES = ["process_inbound_message", "notify_staff_draft", "automation_event"];
+const DEFAULT_QUEUES = ["process_inbound_message", "notify_staff_draft", "automation_event", "log_activity"];
 
 export async function GET(request: Request) {
   return handleWorkerRequest(request);
@@ -135,6 +135,19 @@ async function executeJob(queue: string, payload: Record<string, unknown>): Prom
       trigger: payload.trigger as Parameters<typeof runAutomationForEvent>[0]["trigger"],
       entityType: payload.entityType as Parameters<typeof runAutomationForEvent>[0]["entityType"],
       entityId: payload.entityId ? String(payload.entityId) : undefined,
+      meta: (payload.meta ?? {}) as Record<string, unknown>,
+    });
+    return;
+  }
+
+  if (queue === "log_activity") {
+    const { logActivity } = await import("@/lib/activity");
+    await logActivity({
+      workspaceId: String(payload.workspaceId ?? ""),
+      actorId: payload.actorId ? String(payload.actorId) : null,
+      entityType: String(payload.entityType ?? ""),
+      entityId: payload.entityId ? String(payload.entityId) : undefined,
+      action: String(payload.action ?? ""),
       meta: (payload.meta ?? {}) as Record<string, unknown>,
     });
     return;

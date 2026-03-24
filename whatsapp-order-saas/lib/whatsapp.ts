@@ -13,19 +13,21 @@
  * the caller's main flow.
  */
 
+import { optionalEnvValue, requireEnvValue } from "@/lib/env";
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const API_VERSION = process.env.WHATSAPP_API_VERSION ?? "v19.0";
+const API_VERSION = optionalEnvValue(process.env.WHATSAPP_API_VERSION, "v19.0");
 
 function getConfig(): { accessToken: string; phoneNumberId: string } {
-  const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!accessToken || !phoneNumberId) {
-    throw new Error(
-      "Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID env vars."
-    );
-  }
+  const accessToken = requireEnvValue(
+    process.env.WHATSAPP_ACCESS_TOKEN,
+    "WHATSAPP_ACCESS_TOKEN"
+  );
+  const phoneNumberId = requireEnvValue(
+    process.env.WHATSAPP_PHONE_NUMBER_ID,
+    "WHATSAPP_PHONE_NUMBER_ID"
+  );
 
   return { accessToken, phoneNumberId };
 }

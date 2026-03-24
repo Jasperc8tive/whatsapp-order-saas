@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useTransition, useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Order, OrderStatus } from "@/types/order";
+import type { OrderAssignment } from "@/types/team";
 import {
   formatCurrency,
   formatRelativeTime,
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
 } from "@/lib/utils";
+import { getOrderAssignment } from "@/lib/actions/assignments";
+import AssignmentBadge from "./AssignmentBadge";
+import AssignmentModal from "./AssignmentModal";
 
 const ALL_STATUSES: OrderStatus[] = [
   "pending",
@@ -29,17 +33,46 @@ function toWaNumber(raw: string): string {
     : digits;
 }
 
+
+
 interface KanbanCardProps {
   order: Order;
+  workspaceId?: string;
   /** When true the card is rendered inside DragOverlay — no drag listeners */
   overlay?: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   isPending?: boolean;
 }
 
-export default function KanbanCard({ order, overlay = false, onStatusChange, isPending = false }: KanbanCardProps) {
+export default function KanbanCard({
+  order,
+  workspaceId,
+  overlay = false,
+  onStatusChange,
+  isPending = false,
+}: KanbanCardProps) {
   const [localPending, startTransition] = useTransition();
   const isUpdating = isPending || localPending;
+
+  // Assignment state
+  const [assignment, setAssignment] = useState<OrderAssignment | null>(null);
+  const [isLoadingAssignment, setIsLoadingAssignment] = useState(true);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+
+  // Load assignment on mount
+  useEffect(() => {
+    async function loadAssignment() {
+      try {
+        const result = await getOrderAssignment(order.id);
+        setAssignment(result.assignment ?? null);
+      } catch (err) {
+        console.error("Failed to load assignment:", err);
+      } finally {
+        setIsLoadingAssignment(false);
+      }
+    }
+    loadAssignment();
+  }, [order.id]);
 
   function handleStatusSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const newStatus = e.target.value as OrderStatus;
@@ -149,7 +182,7 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
         )}
       </div>
 
-      {/* Footer: amount + time */}
+      {/* Footer: amount + time + assignment */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-bold text-gray-900">
           {formatCurrency(order.total_amount)}
@@ -162,6 +195,18 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           {formatRelativeTime(order.created_at)}
         </div>
       </div>
+
+      {/* Assignment */}
+      {workspaceId && !overlay && (
+        <div className="flex items-center gap-1 py-2 px-2 mb-2 bg-gray-50 rounded-lg">
+          <span className="text-[10px] text-gray-500 font-medium">Assigned:</span>
+          <AssignmentBadge
+            assignment={assignment}
+            isLoading={isLoadingAssignment}
+            onClick={() => setShowAssignmentModal(true)}
+          />
+        </div>
+      )}
 
       {/* WhatsApp phone — tappable link */}
       {order.customer_phone && (
@@ -207,6 +252,22 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           View details →
         </Link>
       </div>
+
+      {/* Assignment modal */}
+      {showAssignmentModal && workspaceId && (
+        <AssignmentModal
+          orderId={order.id}
+          workspaceId={workspaceId}
+          currentAssignment={assignment}
+          onClose={() => setShowAssignmentModal(false)}
+          onAssigned={() => {
+            // Refresh assignment data after assignment is changed
+            getOrderAssignment(order.id).then((result) => {
+              setAssignment(result.assignment ?? null);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

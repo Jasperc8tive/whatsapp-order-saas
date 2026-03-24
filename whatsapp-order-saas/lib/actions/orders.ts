@@ -8,6 +8,13 @@ import type { OrderStatus } from "@/types/order";
 import { notifyOrderCreated, notifyOrderShipped } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { enqueueJob } from "@/lib/jobs";
+import {
+  getCurrentWorkspaceId,
+  getCurrentWorkspaceRole,
+  assertWorkspaceRole,
+  canWriteOrder,
+  canUpdateOrderDelivery,
+} from "@/lib/workspace";
 
 //  Manual order creation (from vendor dashboard) 
 export interface ManualOrderInput {
@@ -24,6 +31,11 @@ export async function createManualOrder(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated." };
 
+  // Check role: only owner and staff can create orders
+  if (!(await canWriteOrder(user.id))) {
+    return { error: "Only workspace owner and staff can create orders." };
+  }
+
   const { customerName, phone, items, notes } = input;
   if (!customerName.trim() || !phone.trim()) {
     return { error: "Customer name and phone are required." };
@@ -32,17 +44,23 @@ export async function createManualOrder(
     return { error: "Add at least one item with a valid name and quantity." };
   }
 
+  // Get workspace ID for this user
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) {
+    return { error: "Could not determine your workspace." };
+  }
+
   //  Plan limit check 
   const admin = createAdminClient();
   const { data: vendorRow } = await admin
     .from("users")
     .select("business_name")
-    .eq("id", user.id)
+    .eq("id", workspaceId)
     .single();
 
   const planCheck = await checkPlanLimit(
     admin,
-    user.id,
+    workspaceId,
     DEFAULT_PLAN as PlanId
   );
   if (!planCheck.allowed) return { error: planCheck.reason ?? "Monthly order limit reached." };
@@ -54,7 +72,7 @@ export async function createManualOrder(
   const { data: existingCustomer, error: existingErr } = await admin
     .from("customers")
     .select("id")
-    .eq("vendor_id", user.id)
+    .eq("vendor_id", workspaceId)
     .eq("phone", normalizedPhone)
     .maybeSingle();
 
@@ -67,13 +85,13 @@ export async function createManualOrder(
       .from("customers")
       .update({ name: normalizedName })
       .eq("id", customerId)
-      .eq("vendor_id", user.id);
+      .eq("vendor_id", workspaceId);
 
     if (updateCustomerErr) return { error: updateCustomerErr.message };
   } else {
     const { data: createdCustomer, error: createCustomerErr } = await admin
       .from("customers")
-      .insert({ vendor_id: user.id, name: normalizedName, phone: normalizedPhone })
+      .insert({ vendor_id: workspaceId, name: normalizedName, phone: normalizedPhone })
       .select("id")
       .single();
 
@@ -90,7 +108,7 @@ export async function createManualOrder(
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .insert({
-      vendor_id:      user.id,
+      vendor_id:      workspaceId,
       customer_id:    customerId,
       total_amount:   totalAmount,
     })
@@ -138,7 +156,7 @@ export async function createManualOrder(
   });
 
   void logActivity({
-    workspaceId: user.id,
+    workspaceId: workspaceId,
     actorId: user.id,
     entityType: "order",
     entityId: order.id,
@@ -147,7 +165,7 @@ export async function createManualOrder(
   });
 
   await enqueueJob("automation_event", {
-    workspaceId: user.id,
+    workspaceId: workspaceId,
     trigger: "order_created",
     entityType: "order",
     entityId: order.id,
@@ -171,11 +189,33 @@ export async function updateOrderStatus(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthenticated" };
 
+  // Check role: all roles can update delivery-related fields
+  if (!(await canUpdateOrderDelivery(user.id))) {
+    return { error: "Not authorized to update order status." };
+  }
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) {
+    return { error: "Workspace not found." };
+  }
+
+  // First verify the order belongs to the user's workspace
+  const admin = createAdminClient();
+  const { data: orderRow } = await admin
+    .from("orders")
+    .select("vendor_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!orderRow || orderRow.vendor_id !== workspaceId) {
+    return { error: "Order not found or not in your workspace." };
+  }
+
   const { error } = await supabase
     .from("orders")
     .update({ order_status: newStatus, updated_at: new Date().toISOString() })
     .eq("id", orderId)
-    .eq("vendor_id", user.id);   // defence in depth on top of RLS
+    .eq("vendor_id", workspaceId);   // defence in depth on top of RLS
 
   // Some deployed schemas use `status` instead of `order_status`.
   if (error && error.message.toLowerCase().includes("order_status")) {
@@ -183,22 +223,15 @@ export async function updateOrderStatus(
       .from("orders")
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq("id", orderId)
-      .eq("vendor_id", user.id);
+      .eq("vendor_id", workspaceId);
 
     if (legacyError) return { error: legacyError.message };
   } else if (error) {
     return { error: error.message };
   }
 
-  // Resolve workspace for this order to log activity
-  const { data: orderRow } = await createAdminClient()
-    .from("orders")
-    .select("vendor_id")
-    .eq("id", orderId)
-    .maybeSingle();
-
   void logActivity({
-    workspaceId: (orderRow?.vendor_id as string | null) ?? user.id,
+    workspaceId: workspaceId,
     actorId: user.id,
     entityType: "order",
     entityId: orderId,
@@ -207,7 +240,7 @@ export async function updateOrderStatus(
   });
 
   await enqueueJob("automation_event", {
-    workspaceId: ((orderRow?.vendor_id as string | null) ?? user.id),
+    workspaceId: workspaceId,
     trigger: "order_status_changed",
     entityType: "order",
     entityId: orderId,
@@ -216,24 +249,24 @@ export async function updateOrderStatus(
 
   //  WhatsApp notification on "shipped" 
   if (newStatus === "shipped") {
-    const admin = createAdminClient();
+    const adminClient = createAdminClient();
 
-    const { data: orderRow } = await admin
+    const { data: shippedOrderRow } = await adminClient
       .from("orders")
       .select(`id, customers ( name, phone ), deliveries ( courier, tracking_id, delivery_status )`)
       .eq("id", orderId)
       .single();
 
-    const customer   = (orderRow?.customers  as unknown) as { name: string; phone: string } | null;
-    const deliveries = (orderRow?.deliveries as unknown) as Array<{
+    const customer   = (shippedOrderRow?.customers  as unknown) as { name: string; phone: string } | null;
+    const deliveries = (shippedOrderRow?.deliveries as unknown) as Array<{
       courier: string | null; tracking_id: string | null; delivery_status: string;
     }> | null;
     const delivery = deliveries?.find((d) => d.delivery_status !== "returned") ?? deliveries?.[0];
 
-    const { data: vendorRow } = await admin
+    const { data: vendorRow } = await adminClient
       .from("users")
       .select("business_name")
-      .eq("id", user.id)
+      .eq("id", workspaceId)
       .single();
 
     if (customer?.phone) {
