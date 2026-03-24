@@ -11,10 +11,18 @@ export function createAdminClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     "NEXT_PUBLIC_SUPABASE_URL"
   );
-  const key = requireEnvValue(
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    "SUPABASE_SERVICE_ROLE_KEY"
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = requireEnvValue(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY"
   );
+  const key = serviceRoleKey || anonKey;
+
+  if (!serviceRoleKey) {
+    console.warn(
+      "[supabaseAdmin] SUPABASE_SERVICE_ROLE_KEY is missing. Falling back to anon key. Some admin-only operations may be limited."
+    );
+  }
 
   return createClient(url, key, {
     auth: {
