@@ -12,6 +12,7 @@ import OrderSmartRepliesPanel from "./OrderSmartRepliesPanel";
 import { getOrderAssignment, listAssignableMembers } from "@/lib/actions/assignments";
 import OrderSummaryPanel from "./OrderSummaryPanel";
 import CustomerSentimentAnalyzer from "./CustomerSentimentAnalyzer";
+import ProductRecommendationsPanel from "./ProductRecommendationsPanel";
 
 interface Props {
   params: { id: string };

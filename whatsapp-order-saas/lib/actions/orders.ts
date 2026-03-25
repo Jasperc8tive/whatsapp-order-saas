@@ -55,6 +55,18 @@ export interface SentimentAnalysisResult {
   reason?: string;
 }
 
+export interface ProductRecommendation {
+  productId: string;
+  productName: string;
+  reason: string;
+  confidence: number;
+}
+
+export interface ProductRecommendationsResult {
+  recommendations: ProductRecommendation[];
+  confidence: number;
+}
+
 const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 function getSmartReplyClient(): OpenAI {
@@ -337,8 +349,154 @@ export async function autofillManualOrderFromChat(
         "Could not confidently extract order items from this message. Please edit manually.",
     };
   }
+  export async function generateProductRecommendations(
+    customerId: string
+  ): Promise<{ data?: ProductRecommendationsResult; error?: string }> {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated." };
 
-  const priceMap: Record<string, number> = {};
+    const workspaceId = await getCurrentWorkspaceId(user.id);
+    if (!workspaceId) return { error: "Could not determine your workspace." };
+
+    const admin = createAdminClient();
+    const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+    if (!hasAiInboxCopilotAccess(currentPlanId)) {
+      return { error: "Product recommendations are available on the Pro plan only." };
+    }
+
+    // Get customer's past orders
+    const { data: pastOrders } = await admin
+      .from("orders")
+      .select("id")
+      .eq("customer_id", customerId)
+      .eq("vendor_id", workspaceId)
+      .limit(10);
+
+    if (!pastOrders || pastOrders.length === 0) {
+      return {
+        data: {
+          recommendations: [],
+          confidence: 0,
+        },
+      };
+    }
+
+    // Get items from past orders
+    const { data: pastItems } = await admin
+      .from("order_items")
+      .select("product_name")
+      .in("order_id", pastOrders.map((o) => o.id as string));
+
+    const purchaseHistory = (pastItems ?? []).map((item) => item.product_name).join(", ");
+
+    // Get all available products
+    const { data: allProducts } = await admin
+      .from("products")
+      .select("id, name, price")
+      .eq("vendor_id", workspaceId)
+      .eq("is_active", true)
+      .limit(50);
+
+    if (!allProducts || allProducts.length === 0) {
+      return {
+        data: {
+          recommendations: [],
+          confidence: 0,
+        },
+      };
+    }
+
+    const productList = (allProducts ?? [])
+      .map((p) => `${p.name} (${p.id})`)
+      .join(", ");
+
+    try {
+      const client = getSmartReplyClient();
+      const completion = await client.chat.completions.create({
+        model: SMART_REPLY_MODEL,
+        temperature: 0.4,
+        max_tokens: 400,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You recommend complementary products based on customer purchase history. Return strict JSON with recommendations array containing {productId, productName, reason, confidence}. Max 3 recommendations.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              customer_purchase_history: purchaseHistory,
+              available_products: productList,
+              recommendation_count: 3,
+            }),
+          },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content ?? "";
+      const parsed = JSON.parse(raw) as {
+        recommendations?: Array<{
+          productId?: string;
+          productName?: string;
+          reason?: string;
+          confidence?: number;
+        }>;
+      };
+
+      const recommendations = (parsed.recommendations ?? [])
+        .filter((r) => r.productId && r.productName)
+        .map((r) => ({
+          productId: r.productId ?? "",
+          productName: r.productName ?? "",
+          reason: (r.reason ?? "").slice(0, 100),
+          confidence: Math.max(0, Math.min(1, Number(r.confidence ?? 0.7))),
+        }))
+        .slice(0, 3);
+
+      const avgConfidence = recommendations.length > 0
+        ? recommendations.reduce((sum, r) => sum + r.confidence, 0) / recommendations.length
+        : 0;
+
+      await logActivity({
+        workspaceId,
+        actorId: user.id,
+        entityType: "customer",
+        entityId: customerId,
+        action: "product_recommendations_generated",
+        meta: {
+          source: "ai",
+          recommendation_count: recommendations.length,
+        },
+      });
+
+      return {
+        data: {
+          recommendations,
+          confidence: avgConfidence,
+        },
+      };
+    } catch (err) {
+      await logActivity({
+        workspaceId,
+        actorId: user.id,
+        entityType: "customer",
+        entityId: customerId,
+        action: "product_recommendations_generated",
+        meta: {
+          source: "fallback_error",
+        },
+      });
+      return {
+        data: {
+          recommendations: [],
+          confidence: 0,
+        },
+      };
+    }
+  }
+
   for (const p of products ?? []) priceMap[p.id as string] = Number(p.price ?? 0);
 
   const detectedPhone = extractPhoneFromText(trimmed);
