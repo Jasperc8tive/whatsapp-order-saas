@@ -8,7 +8,7 @@ import type { OrderStatus } from "@/types/order";
 import { notifyOrderCreated, notifyOrderShipped } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { enqueueJob } from "@/lib/jobs";
-
+import { formatCurrency } from "@/lib/utils";
 //  Manual order creation (from vendor dashboard) 
 export interface ManualOrderInput {
   customerName: string;
