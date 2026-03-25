@@ -156,15 +156,6 @@ export default async function OrderDetailPage({ params }: Props) {
       {/* Order Summary */}
       <OrderSummaryPanel orderId={order.id} canUseAiSummary={canUseAiSmartReplies} />
 
-      {/* Product Recommendations */}
-      {customer && (
-        <ProductRecommendationsPanel
-          customerId={customer.id}
-          canUseAiFeatures={canUseAiSmartReplies}
-        />
-      )}
-
-
       {/* Order items */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Items</h3>
@@ -190,6 +181,16 @@ export default async function OrderDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* Product Recommendations */}
+      {customer && (
+        <ProductRecommendationsPanel
+          customerId={customer.id}
+          customerName={customer.name}
+          customerPhone={customer.phone}
+          canUseAiFeatures={canUseAiSmartReplies}
+        />
+      )}
 
       {/* Payments */}
       {paymentRows.length > 0 && (

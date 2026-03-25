@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   autofillManualOrderFromChat,
   createManualOrder,
@@ -27,6 +27,8 @@ export default function NewOrderModal({
   canUseAiAutofill: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen]         = useState(false);
   const [step, setStep]         = useState<Step>("form");
   const [loading, setLoading]   = useState(false);
@@ -38,6 +40,46 @@ export default function NewOrderModal({
   const [phone, setPhone]       = useState("");
   const [notes, setNotes]       = useState("");
   const [items, setItems]       = useState<LineItem[]>([emptyItem()]);
+
+  useEffect(() => {
+    const recommendedProductName = searchParams.get("recommendedProductName");
+    if (!recommendedProductName) return;
+
+    const recommendedProductPrice = Number(searchParams.get("recommendedProductPrice") ?? "0");
+    const recommendedCustomerName = searchParams.get("recommendedCustomerName") ?? "";
+    const recommendedCustomerPhone = searchParams.get("recommendedCustomerPhone") ?? "";
+
+    const timer = window.setTimeout(() => {
+      setCustomerName(recommendedCustomerName);
+      setPhone(recommendedCustomerPhone);
+      setNotes("Upsell order prefilled from AI recommendation.");
+      setItems([
+        {
+          product_name: recommendedProductName,
+          quantity: 1,
+          price: Number.isFinite(recommendedProductPrice) ? recommendedProductPrice : 0,
+        },
+      ]);
+      setChatText("");
+      setAutofillMeta("Prefilled from AI product recommendation.");
+      setError(null);
+      setStep("form");
+      setOpen(true);
+    }, 0);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("recommendedProductId");
+    params.delete("recommendedProductName");
+    params.delete("recommendedProductPrice");
+    params.delete("recommendedCustomerName");
+    params.delete("recommendedCustomerPhone");
+    params.delete("recommendationSource");
+
+    const nextUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+
+    return () => window.clearTimeout(timer);
+  }, [pathname, router, searchParams]);
 
   function openModal() {
     setCustomerName(""); setPhone(""); setNotes("");

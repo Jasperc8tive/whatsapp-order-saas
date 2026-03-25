@@ -1,18 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { generateProductRecommendations } from "@/lib/actions/orders";
+import { useRouter } from "next/navigation";
+import {
+  generateProductRecommendations,
+  trackProductRecommendationUsage,
+} from "@/lib/actions/orders";
 import type { ProductRecommendationsResult } from "@/lib/actions/orders";
 
 interface ProductRecommendationsPanelProps {
   customerId: string;
+  customerName: string;
+  customerPhone: string;
   canUseAiFeatures: boolean;
 }
 
 export default function ProductRecommendationsPanel({
   customerId,
+  customerName,
+  customerPhone,
   canUseAiFeatures,
 }: ProductRecommendationsPanelProps) {
+  const router = useRouter();
   const [recommendations, setRecommendations] = useState<ProductRecommendationsResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
@@ -54,11 +63,46 @@ export default function ProductRecommendationsPanel({
       setRecommendations(null);
     } else if (result.data) {
       setRecommendations(result.data);
+      if (result.data.recommendations.length > 0) {
+        void trackProductRecommendationUsage(customerId, "impression", {
+          surface: "order_detail",
+          recommendation_count: result.data.recommendations.length,
+          product_ids: result.data.recommendations.map((recommendation) => recommendation.productId),
+        });
+      }
     }
 
     setIsLoading(false);
     setHasRequested(true);
   };
+
+  async function handleAcceptRecommendation(
+    productId: string,
+    productName: string,
+    productPrice: number
+  ) {
+    await trackProductRecommendationUsage(customerId, "accepted", {
+      surface: "order_detail",
+      target: "new_order",
+      product_id: productId,
+      product_name: productName,
+    });
+
+    const params = new URLSearchParams({
+      recommendedProductId: productId,
+      recommendedProductName: productName,
+      recommendedProductPrice: String(productPrice),
+      recommendedCustomerName: customerName,
+      recommendedCustomerPhone: customerPhone,
+      recommendationSource: "order_detail",
+    });
+
+    router.push(`/dashboard/orders?${params.toString()}`);
+  }
+
+  function handleViewProduct(productId: string) {
+    router.push(`/dashboard/products?highlight=${encodeURIComponent(productId)}`);
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -86,12 +130,31 @@ export default function ProductRecommendationsPanel({
             {recommendations.recommendations.map((rec, idx) => (
               <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                 <div className="flex items-start justify-between mb-1">
-                  <p className="text-sm font-semibold text-gray-800">{rec.productName}</p>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{rec.productName}</p>
+                    <p className="text-xs text-gray-500">₦{rec.price.toLocaleString()}</p>
+                  </div>
                   <span className="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
                     {Math.round(rec.confidence * 100)}%
                   </span>
                 </div>
                 <p className="text-xs text-gray-600">{rec.reason}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAcceptRecommendation(rec.productId, rec.productName, rec.price)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                  >
+                    Add To New Order
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleViewProduct(rec.productId)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
+                  >
+                    View Product
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -58,6 +58,7 @@ export interface SentimentAnalysisResult {
 export interface ProductRecommendation {
   productId: string;
   productName: string;
+  price: number;
   reason: string;
   confidence: number;
 }
@@ -66,6 +67,8 @@ export interface ProductRecommendationsResult {
   recommendations: ProductRecommendation[];
   confidence: number;
 }
+
+export type ProductRecommendationUsageEvent = "impression" | "accepted";
 
 const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
@@ -430,6 +433,9 @@ export async function generateProductRecommendations(
   const productList = allProducts
     .map((product) => `${product.name} (${product.id})`)
     .join(", ");
+  const productById = new Map(
+    allProducts.map((product) => [product.id as string, Number(product.price ?? 0)])
+  );
 
   try {
     const client = getSmartReplyClient();
@@ -471,6 +477,7 @@ export async function generateProductRecommendations(
       .map((recommendation) => ({
         productId: recommendation.productId ?? "",
         productName: recommendation.productName ?? "",
+        price: productById.get(recommendation.productId ?? "") ?? 0,
         reason: (recommendation.reason ?? "").slice(0, 100),
         confidence: Math.max(0, Math.min(1, Number(recommendation.confidence ?? 0.7))),
       }))
@@ -518,6 +525,49 @@ export async function generateProductRecommendations(
       },
     };
   }
+}
+
+export async function trackProductRecommendationUsage(
+  customerId: string,
+  event: ProductRecommendationUsageEvent,
+  meta?: Record<string, unknown>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) return { ok: false, error: "Could not determine your workspace." };
+
+  const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { ok: false, error: "Product recommendations are available on the Pro plan only." };
+  }
+
+  const { data: customerRow } = await admin
+    .from("customers")
+    .select("id, vendor_id")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (!customerRow || customerRow.vendor_id !== workspaceId) {
+    return { ok: false, error: "Customer not found or not in your workspace." };
+  }
+
+  await logActivity({
+    workspaceId,
+    actorId: user.id,
+    entityType: "customer",
+    entityId: customerId,
+    action:
+      event === "accepted"
+        ? "product_recommendation_accepted"
+        : "product_recommendation_impression",
+    meta: meta ?? {},
+  });
+
+  return { ok: true };
 }
 
 export async function generateSmartReplySuggestions(
