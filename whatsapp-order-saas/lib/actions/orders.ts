@@ -23,6 +23,7 @@ import {
   canWriteOrder,
   canUpdateOrderDelivery,
 } from "@/lib/workspace";
+import { formatCurrency } from "@/lib/utils";
 
 //  Manual order creation (from vendor dashboard) 
 export interface ManualOrderInput {
