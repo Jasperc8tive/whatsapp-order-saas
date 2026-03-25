@@ -140,11 +140,23 @@ const sections = [
   {
     name: "AI Drafts",
     href: "/dashboard/drafts",
+    proOnly: true,
     purpose: "Review AI-captured order drafts from inbound messages.",
     features: [
       "Pending review queue",
       "Approve to convert into real orders",
       "Reject drafts with review control",
+    ],
+  },
+  {
+    name: "AI Capture Settings",
+    href: "/dashboard/settings/ai-capture",
+    proOnly: true,
+    purpose: "Tune AI parsing with product aliases and confidence routing.",
+    features: [
+      "Webhook AI capture setup",
+      "Alias mapping for higher parse accuracy",
+      "Review confidence threshold behavior",
     ],
   },
   {
@@ -261,7 +273,14 @@ export default function OnboardingPage() {
             <article key={section.name} className="border border-gray-200 rounded-lg p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{section.name}</h3>
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    {section.name}
+                    {(section as { proOnly?: boolean }).proOnly && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                        Pro
+                      </span>
+                    )}
+                  </h3>
                   <p className="text-sm text-gray-600 mt-1">{section.purpose}</p>
                 </div>
                 <Link

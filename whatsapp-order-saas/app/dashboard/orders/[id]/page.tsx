@@ -1,11 +1,18 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 import { formatCurrency, formatDate, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "@/lib/utils";
 import type { OrderStatus } from "@/types/order";
 import OrderStatusSelect from "./OrderStatusSelect";
 import OrderAssignmentPanel from "./OrderAssignmentPanel";
+import OrderSmartRepliesPanel from "./OrderSmartRepliesPanel";
 import { getOrderAssignment, listAssignableMembers } from "@/lib/actions/assignments";
+import OrderSummaryPanel from "./OrderSummaryPanel";
+import CustomerSentimentAnalyzer from "./CustomerSentimentAnalyzer";
+import ProductRecommendationsPanel from "./ProductRecommendationsPanel";
 
 interface Props {
   params: { id: string };
@@ -16,14 +23,20 @@ export default async function OrderDetailPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) notFound();
+
   const { data: order, error } = await supabase
     .from("orders")
     .select("*")
     .eq("id", params.id)
-    .eq("vendor_id", user.id)
+    .eq("vendor_id", workspaceId)
     .single();
 
   if (error || !order) notFound();
+
+  const currentPlanId = await getWorkspacePlan(createAdminClient(), workspaceId);
+  const canUseAiSmartReplies = hasAiInboxCopilotAccess(currentPlanId);
 
   const customerId = (order.customer_id as string | null) ?? null;
 
@@ -123,12 +136,25 @@ export default async function OrderDetailPage({ params }: Props) {
             <div className="space-y-0.5">
               <p className="text-sm font-semibold text-gray-800">{customer.name}</p>
               <p className="text-sm text-gray-500">{customer.phone}</p>
+              {order.notes && (
+                <div className="pt-2 mt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">Customer Message:</p>
+                  <p className="text-sm text-gray-700 mb-3 italic">{order.notes}</p>
+                  <CustomerSentimentAnalyzer
+                    customerMessage={order.notes as string}
+                    canUseAiFeatures={canUseAiSmartReplies}
+                  />
+                </div>
+              )}
               {customer.email && <p className="text-sm text-gray-500">{customer.email}</p>}
               {customer.address && <p className="text-sm text-gray-500">{customer.address}</p>}
             </div>
           </div>
         </div>
       )}
+
+      {/* Order Summary */}
+      <OrderSummaryPanel orderId={order.id} canUseAiSummary={canUseAiSmartReplies} />
 
       {/* Order items */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -155,6 +181,16 @@ export default async function OrderDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* Product Recommendations */}
+      {customer && (
+        <ProductRecommendationsPanel
+          customerId={customer.id}
+          customerName={customer.name}
+          customerPhone={customer.phone}
+          canUseAiFeatures={canUseAiSmartReplies}
+        />
+      )}
 
       {/* Payments */}
       {paymentRows.length > 0 && (
@@ -197,6 +233,12 @@ export default async function OrderDetailPage({ params }: Props) {
           ))}
         </div>
       )}
+
+      <OrderSmartRepliesPanel
+        orderId={order.id}
+        customerPhone={customer?.phone ?? ""}
+        canUseAiSmartReplies={canUseAiSmartReplies}
+      />
 
       {/* Assignment */}
       <OrderAssignmentPanel

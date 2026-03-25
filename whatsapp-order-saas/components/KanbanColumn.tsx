@@ -19,12 +19,13 @@ interface KanbanColumnProps {
   config: ColumnConfig;
   orders: Order[];
   workspaceId?: string;
+  canUseAiSmartReplies?: boolean;
   isAnyDragging: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   updatingIds?: Set<string>;
 }
 
-export default function KanbanColumn({ config, orders, workspaceId, isAnyDragging, onStatusChange, updatingIds }: KanbanColumnProps) {
+export default function KanbanColumn({ config, orders, workspaceId, canUseAiSmartReplies = false, isAnyDragging, onStatusChange, updatingIds }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: config.id });
   const [cardsParentRef] = useAutoAnimate<HTMLDivElement>({
     duration: 220,
@@ -83,6 +84,7 @@ export default function KanbanColumn({ config, orders, workspaceId, isAnyDraggin
                 key={order.id}
                 order={order}
                 workspaceId={workspaceId}
+                canUseAiSmartReplies={canUseAiSmartReplies}
                 onStatusChange={onStatusChange}
                 isPending={updatingIds?.has(order.id)}
               />

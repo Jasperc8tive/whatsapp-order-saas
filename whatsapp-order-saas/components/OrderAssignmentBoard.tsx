@@ -281,7 +281,7 @@ export default function OrderAssignmentBoard({
       {/* Info */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
         <strong>Tip:</strong> Drag unassigned orders from the left column to a delivery
-        manager's queue on the right. Click × to unassign.
+        manager&apos;s queue on the right. Click × to unassign.
       </div>
     </div>
   );

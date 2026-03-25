@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createManualOrder, type ManualOrderInput } from "@/lib/actions/orders";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  autofillManualOrderFromChat,
+  createManualOrder,
+  type ManualOrderInput,
+} from "@/lib/actions/orders";
+import Link from "next/link";
 
 interface LineItem {
   product_name: string;
@@ -14,20 +19,99 @@ const emptyItem = (): LineItem => ({ product_name: "", quantity: 1, price: 0 });
 
 type Step = "form" | "success";
 
-export default function NewOrderModal({ vendorId }: { vendorId: string }) {
+export default function NewOrderModal({
+  vendorId,
+  canUseAiAutofill,
+}: {
+  vendorId: string;
+  canUseAiAutofill: boolean;
+}) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen]         = useState(false);
   const [step, setStep]         = useState<Step>("form");
   const [loading, setLoading]   = useState(false);
+  const [autofillLoading, setAutofillLoading] = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [chatText, setChatText] = useState("");
+  const [autofillMeta, setAutofillMeta] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone]       = useState("");
   const [notes, setNotes]       = useState("");
   const [items, setItems]       = useState<LineItem[]>([emptyItem()]);
 
+  useEffect(() => {
+    const recommendedProductName = searchParams.get("recommendedProductName");
+    if (!recommendedProductName) return;
+
+    const recommendedProductPrice = Number(searchParams.get("recommendedProductPrice") ?? "0");
+    const recommendedQuantity     = Math.max(1, parseInt(searchParams.get("recommendedQuantity") ?? "1") || 1);
+    const recommendedCustomerName = searchParams.get("recommendedCustomerName") ?? "";
+    const recommendedCustomerPhone = searchParams.get("recommendedCustomerPhone") ?? "";
+
+    const timer = window.setTimeout(() => {
+      setCustomerName(recommendedCustomerName);
+      setPhone(recommendedCustomerPhone);
+      setNotes("Upsell order prefilled from AI recommendation.");
+      setItems([
+        {
+          product_name: recommendedProductName,
+          quantity: recommendedQuantity,
+          price: Number.isFinite(recommendedProductPrice) ? recommendedProductPrice : 0,
+        },
+      ]);
+      setChatText("");
+      setAutofillMeta("Prefilled from AI product recommendation.");
+      setError(null);
+      setStep("form");
+      setOpen(true);
+    }, 0);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("recommendedProductId");
+    params.delete("recommendedProductName");
+    params.delete("recommendedProductPrice");
+    params.delete("recommendedQuantity");
+    params.delete("recommendedCustomerName");
+    params.delete("recommendedCustomerPhone");
+    params.delete("recommendationSource");
+
+    const nextUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+
+    return () => window.clearTimeout(timer);
+  }, [pathname, router, searchParams]);
+
   function openModal() {
     setCustomerName(""); setPhone(""); setNotes("");
-    setItems([emptyItem()]); setError(null); setStep("form"); setOpen(true);
+    setItems([emptyItem()]); setError(null); setStep("form");
+    setChatText(""); setAutofillMeta(null); setOpen(true);
+  }
+
+  async function handleAutofill() {
+    if (!chatText.trim()) {
+      setError("Paste a customer chat first to use AI autofill.");
+      return;
+    }
+
+    setAutofillLoading(true);
+    setError(null);
+    setAutofillMeta(null);
+
+    const result = await autofillManualOrderFromChat(chatText);
+    setAutofillLoading(false);
+
+    if (result.error || !result.data) {
+      setError(result.error ?? "AI autofill could not parse this chat.");
+      return;
+    }
+
+    if (result.data.customerName) setCustomerName(result.data.customerName);
+    if (result.data.phone) setPhone(result.data.phone);
+    if (result.data.notes) setNotes(result.data.notes);
+    if (result.data.items.length > 0) setItems(result.data.items);
+    setAutofillMeta(`Autofilled with ${(result.data.confidence * 100).toFixed(0)}% confidence.`);
   }
 
   function updateItem(idx: number, field: keyof LineItem, value: string) {
@@ -109,6 +193,45 @@ export default function NewOrderModal({ vendorId }: { vendorId: string }) {
               </div>
             ) : (
               <form onSubmit={submit} className="space-y-4" noValidate>
+                {/* AI Autofill */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      Chat-to-Order Autofill
+                    </p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                      PRO AI
+                    </span>
+                  </div>
+                  <textarea
+                    value={chatText}
+                    onChange={(e) => setChatText(e.target.value)}
+                    rows={3}
+                    placeholder="Paste customer WhatsApp chat here and autofill the order fields"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 resize-none"
+                  />
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    {canUseAiAutofill ? (
+                      <button
+                        type="button"
+                        onClick={handleAutofill}
+                        disabled={autofillLoading || !chatText.trim()}
+                        className="text-xs font-semibold bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-black disabled:opacity-50 transition-colors"
+                      >
+                        {autofillLoading ? "Autofilling..." : "Autofill with AI"}
+                      </button>
+                    ) : (
+                      <Link
+                        href="/dashboard/billing?feature=ai-inbox-copilot"
+                        className="text-xs font-semibold bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors"
+                      >
+                        Upgrade to Pro to use AI autofill
+                      </Link>
+                    )}
+                    {autofillMeta && <p className="text-xs text-green-700 font-medium">{autofillMeta}</p>}
+                  </div>
+                </div>
+
                 {/* Customer */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

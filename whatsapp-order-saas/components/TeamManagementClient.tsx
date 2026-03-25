@@ -444,7 +444,7 @@ export default function TeamManagementClient({
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <p className="text-sm text-blue-900">
           <strong>Tip:</strong> Staff members can create and manage orders. Delivery
-          managers can only update delivery status. To change a member's role, click
+          managers can only update delivery status. To change a member&apos;s role, click
           on their role badge.
         </p>
       </div>

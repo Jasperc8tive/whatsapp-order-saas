@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface VideoCardProps {
   title: string;
@@ -25,10 +26,12 @@ export default function VideoCard({
         {/* Thumbnail */}
         <div className="relative bg-gray-900 aspect-video flex items-center justify-center overflow-hidden group">
           {thumbnailUrl ? (
-            <img
+            <Image
               src={thumbnailUrl}
               alt={title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+              fill
+              unoptimized
+              className="object-cover group-hover:scale-105 transition-transform"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-800" />

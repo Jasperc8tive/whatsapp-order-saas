@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -48,7 +50,11 @@ function ProductForm({
 
   const [state, formAction] = useActionState<ProductActionState, FormData>(action, {});
 
-  if (state.success) { onClose(); return null; }
+  useEffect(() => {
+    if (state.success) onClose();
+  }, [state.success, onClose]);
+
+  if (state.success) return null;
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -87,10 +93,8 @@ function ProductForm({
   }
 
   async function handleFormSubmit(formDataToSubmit: FormData) {
-    // Add the image URL to the form data
-    if (imageUrl) {
-      formDataToSubmit.set("imageUrl", imageUrl);
-    }
+    // Always send imageUrl so the server knows when it has been cleared
+    formDataToSubmit.set("imageUrl", imageUrl);
     formAction(formDataToSubmit);
   }
 
@@ -114,8 +118,8 @@ function ProductForm({
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Product Image</label>
         {imageUrl && (
-          <div className="mb-3 relative">
-            <img src={imageUrl} alt="Product preview" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+          <div className="mb-3 relative h-32">
+            <Image src={imageUrl} alt="Product preview" fill unoptimized className="object-cover rounded-lg border border-gray-200" />
             <button
               type="button"
               onClick={() => {
@@ -153,13 +157,14 @@ function ProductForm({
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product, highlighted, onSave }: { product: Product; highlighted?: boolean; onSave: () => void }) {
   const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function toggle() {
     startTransition(async () => {
       await toggleProductActive(product.id, !product.is_active);
+      onSave();
     });
   }
 
@@ -167,6 +172,7 @@ function ProductCard({ product }: { product: Product }) {
     if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
     startTransition(async () => {
       await deleteProduct(product.id);
+      onSave();
     });
   }
 
@@ -174,17 +180,26 @@ function ProductCard({ product }: { product: Product }) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h3 className="text-sm font-semibold text-gray-800 mb-4">Edit Product</h3>
-        <ProductForm editing={product} onClose={() => setEditing(false)} />
+        <ProductForm editing={product} onClose={() => { setEditing(false); onSave(); }} />
       </div>
     );
   }
 
   return (
-    <div className={`bg-white rounded-xl border p-4 flex gap-4 ${!product.is_active ? "opacity-60" : "border-gray-200"}`}>
+    <div
+      id={`product-${product.id}`}
+      className={`bg-white rounded-xl border p-4 flex gap-4 ${
+        highlighted
+          ? "border-amber-300 ring-2 ring-amber-100"
+          : !product.is_active
+          ? "opacity-60"
+          : "border-gray-200"
+      }`}
+    >
       {/* Image or placeholder */}
-      <div className="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 overflow-hidden">
+      <div className="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 overflow-hidden relative">
         {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+          <Image src={product.image_url} alt={product.name} fill unoptimized className="object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -198,6 +213,9 @@ function ProductCard({ product }: { product: Product }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
+            {highlighted && (
+              <p className="mt-1 text-[11px] font-medium text-amber-700">Recommended product</p>
+            )}
           </div>
           <p className="text-sm font-bold text-gray-900 flex-shrink-0">{formatCurrency(product.price)}</p>
         </div>
@@ -221,11 +239,35 @@ function ProductCard({ product }: { product: Product }) {
   );
 }
 
-export default function ProductsClient({ initialProducts }: { initialProducts: Product[] }) {
+export default function ProductsClient({
+  initialProducts,
+  highlightProductId,
+}: {
+  initialProducts: Product[];
+  highlightProductId?: string;
+}) {
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
+
+  function closeAndRefresh() {
+    setShowForm(false);
+    router.refresh();
+  }
+
+  useEffect(() => {
+    if (!highlightProductId) return;
+
+    const element = document.getElementById(`product-${highlightProductId}`);
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightProductId]);
 
   return (
     <div>
+      {highlightProductId && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Highlighted product from AI recommendation.
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Products</h2>
@@ -247,7 +289,7 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">New Product</h3>
-          <ProductForm onClose={() => setShowForm(false)} />
+          <ProductForm onClose={closeAndRefresh} />
         </div>
       )}
 
@@ -267,7 +309,14 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {initialProducts.map((p) => <ProductCard key={p.id} product={p} />)}
+          {initialProducts.map((p) => (
+            <ProductCard
+              key={p.id}
+              product={p}
+              highlighted={p.id === highlightProductId}
+              onSave={closeAndRefresh}
+            />
+          ))}
         </div>
       )}
     </div>

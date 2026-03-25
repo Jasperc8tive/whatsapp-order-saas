@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PlanId = "starter" | "growth" | "pro";
 
+const PLAN_ORDER: PlanId[] = ["starter", "growth", "pro"];
+
 export interface Plan {
   id: PlanId;
   name: string;
@@ -47,6 +49,8 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       "Unlimited orders",
       "Everything in Growth",
+      "AI Inbox Copilot and smart order drafts",
+      "AI capture settings and alias training",
       "Priority support",
       "Advanced analytics",
     ],
@@ -54,6 +58,39 @@ export const PLANS: Record<PlanId, Plan> = {
 };
 
 export const DEFAULT_PLAN: PlanId = "starter";
+export const HIGHEST_PLAN_ID: PlanId = "pro";
+
+export function resolvePlanId(rawPlan: unknown): PlanId {
+  return typeof rawPlan === "string" && rawPlan in PLANS
+    ? (rawPlan as PlanId)
+    : DEFAULT_PLAN;
+}
+
+export function isPlanAtLeast(currentPlan: PlanId, requiredPlan: PlanId): boolean {
+  return PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(requiredPlan);
+}
+
+export function hasAiInboxCopilotAccess(plan: PlanId): boolean {
+  return isPlanAtLeast(plan, HIGHEST_PLAN_ID);
+}
+
+export async function getWorkspacePlan(
+  supabase: SupabaseClient,
+  workspaceId: string
+): Promise<PlanId> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[plans] getWorkspacePlan error:", error.message);
+    return DEFAULT_PLAN;
+  }
+
+  return resolvePlanId((data as { plan?: unknown } | null)?.plan);
+}
 
 /**
  * Returns how many orders this vendor has created in the current calendar month.

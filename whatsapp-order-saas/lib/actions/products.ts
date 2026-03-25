@@ -41,6 +41,10 @@ function buildOwnerPayload(column: string, ownerId: string): Record<string, stri
   return { [column]: ownerId };
 }
 
+function isMissingImageUrlError(message: string): boolean {
+  return isMissingColumnError(message, "image_url");
+}
+
 function isMissingOwnerColumnError(message: string): boolean {
   return OWNER_COLUMN_CANDIDATES.some((column) => isMissingColumnError(message, column));
 }
@@ -96,8 +100,16 @@ export async function createProduct(
         error = null;
         break;
       }
-      error = result.error;
-      priceErrors.push(result.error.message);
+      // If only the image_url column is missing, retry without it
+      if (isMissingImageUrlError(result.error.message) && payload.image_url !== undefined) {
+        delete payload.image_url;
+        const retryResult = await supabase.from("products").insert(payload);
+        if (!retryResult.error) { error = null; break; }
+        error = retryResult.error;
+      } else {
+        error = result.error;
+      }
+      priceErrors.push(error.message);
     }
 
     if (!error) break;
@@ -182,8 +194,9 @@ export async function updateProduct(
         name,
         ...buildPricePayload(priceColumn, price),
       };
-      
-      if (imageUrl) {
+
+      // Always write image_url (null clears it, string sets it, undefined = skip)
+      if (imageUrl !== undefined) {
         updatePayload.image_url = imageUrl;
       }
 
@@ -197,8 +210,16 @@ export async function updateProduct(
         error = null;
         break;
       }
-      error = result.error;
-      priceErrors.push(result.error.message);
+      // If only the image_url column is missing, retry without it
+      if (isMissingImageUrlError(result.error.message) && updatePayload.image_url !== undefined) {
+        delete updatePayload.image_url;
+        const retryResult = await supabase.from("products").update(updatePayload).eq("id", id).eq(ownerColumn, user.id);
+        if (!retryResult.error) { error = null; break; }
+        error = retryResult.error;
+      } else {
+        error = result.error;
+      }
+      priceErrors.push(error.message);
     }
 
     if (!error) break;
@@ -211,8 +232,8 @@ export async function updateProduct(
         name,
         ...buildPricePayload(column, price),
       };
-      
-      if (imageUrl) {
+
+      if (imageUrl !== undefined) {
         updatePayload.image_url = imageUrl;
       }
 
@@ -232,7 +253,7 @@ export async function updateProduct(
     // Final fallback only if every price column variant failed.
     if (error) {
       const fallbackPayload: Record<string, unknown> = { name };
-      if (imageUrl) {
+      if (imageUrl !== undefined) {
         fallbackPayload.image_url = imageUrl;
       }
 
