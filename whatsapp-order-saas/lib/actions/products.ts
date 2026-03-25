@@ -194,8 +194,9 @@ export async function updateProduct(
         name,
         ...buildPricePayload(priceColumn, price),
       };
-      
-      if (imageUrl) {
+
+      // Always write image_url (null clears it, string sets it, undefined = skip)
+      if (imageUrl !== undefined) {
         updatePayload.image_url = imageUrl;
       }
 
@@ -231,8 +232,8 @@ export async function updateProduct(
         name,
         ...buildPricePayload(column, price),
       };
-      
-      if (imageUrl) {
+
+      if (imageUrl !== undefined) {
         updatePayload.image_url = imageUrl;
       }
 
@@ -252,7 +253,7 @@ export async function updateProduct(
     // Final fallback only if every price column variant failed.
     if (error) {
       const fallbackPayload: Record<string, unknown> = { name };
-      if (imageUrl) {
+      if (imageUrl !== undefined) {
         fallbackPayload.image_url = imageUrl;
       }
 

@@ -49,7 +49,11 @@ function ProductForm({
 
   const [state, formAction] = useActionState<ProductActionState, FormData>(action, {});
 
-  if (state.success) { onClose(); return null; }
+  useEffect(() => {
+    if (state.success) onClose();
+  }, [state.success, onClose]);
+
+  if (state.success) return null;
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -88,10 +92,8 @@ function ProductForm({
   }
 
   async function handleFormSubmit(formDataToSubmit: FormData) {
-    // Add the image URL to the form data
-    if (imageUrl) {
-      formDataToSubmit.set("imageUrl", imageUrl);
-    }
+    // Always send imageUrl so the server knows when it has been cleared
+    formDataToSubmit.set("imageUrl", imageUrl);
     formAction(formDataToSubmit);
   }
 
