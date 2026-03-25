@@ -1,6 +1,8 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import Link from "next/link";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { updateSettings, type SettingsState } from "@/lib/actions/settings";
 
 interface SettingsFormProps {
@@ -8,6 +10,7 @@ interface SettingsFormProps {
   slug: string;
   siteOrigin: string;
   whatsappNumber: string | null;
+  currentPlan: string;
 }
 
 function SaveButton() {
@@ -29,8 +32,15 @@ function SaveButton() {
   );
 }
 
-export default function SettingsForm({ businessName, slug, siteOrigin, whatsappNumber }: SettingsFormProps) {
-  const [state, formAction] = useFormState<SettingsState, FormData>(updateSettings, {});
+export default function SettingsForm({
+  businessName,
+  slug,
+  siteOrigin,
+  whatsappNumber,
+  currentPlan,
+}: SettingsFormProps) {
+  const [state, formAction] = useActionState<SettingsState, FormData>(updateSettings, {});
+  const isPro = currentPlan === "pro";
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">
@@ -107,6 +117,43 @@ export default function SettingsForm({ businessName, slug, siteOrigin, whatsappN
             />
             <p className="text-xs text-gray-400 mt-1">Include country code, e.g. +2348012345678</p>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="font-semibold text-gray-800">AI Capture Settings</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Configure webhook AI parsing and product alias mapping for WhatsApp order capture.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-700">
+            Pro
+          </span>
+        </div>
+
+        <div className="mt-4">
+          {isPro ? (
+            <Link
+              href="/dashboard/settings/ai-capture"
+              className="inline-flex items-center text-sm font-semibold bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Open AI Capture Settings
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap">
+              <Link
+                href="/dashboard/billing?feature=ai-inbox-copilot"
+                className="inline-flex items-center text-sm font-semibold bg-amber-100 text-amber-800 px-3 py-2 rounded-lg hover:bg-amber-200 transition-colors"
+              >
+                Upgrade to Pro
+              </Link>
+              <p className="text-xs text-gray-500">
+                Your current plan is <span className="font-semibold capitalize">{currentPlan}</span>.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

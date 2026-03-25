@@ -23,6 +23,26 @@ export interface RecentOrder {
   createdAt: string;
 }
 
+export interface SmartReplyAnalytics {
+  totalGenerated: number;
+  totalCopied: number;
+  totalWhatsAppClicked: number;
+  copyRate: number;        // copied / generated
+  whatsappRate: number;    // whatsapp_clicked / generated
+  byDay: Array<{
+    day: string;          // YYYY-MM-DD
+    generated: number;
+    copied: number;
+    whatsappClicked: number;
+  }>;
+  bySurface: Array<{
+    surface: "kanban_card" | "order_detail";
+    generated: number;
+    copied: number;
+    whatsappClicked: number;
+  }>;
+}
+
 /**
  * Fetch all dashboard analytics for the given vendor (user.id).
  * Uses Promise.all to run independent queries concurrently.
@@ -147,6 +167,115 @@ export async function getDashboardStats(
     repeatCustomers,
     ordersWoW:        thisWeekOrders  - lastWeekOrders,
     revenueWoW:       thisWeekRevenue - lastWeekRevenue,
+  };
+}
+
+/**
+ * Fetch Smart Reply analytics for the last 7 days.
+ */
+export async function getSmartReplyAnalytics(
+  supabase: SupabaseClient,
+  vendorId: string
+): Promise<SmartReplyAnalytics> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+
+  const { data: activities } = await supabase
+    .from("activity_logs")
+    .select("action, created_at, meta")
+    .eq("workspace_id", vendorId)
+    .in("action", [
+      "smart_reply_generated",
+      "smart_reply_copied",
+      "smart_reply_whatsapp_clicked",
+    ])
+    .gte("created_at", sevenDaysAgo.toISOString())
+    .order("created_at", { ascending: true });
+
+  const acts = (activities ?? []) as Array<{
+    action: string;
+    created_at: string;
+    meta: Record<string, unknown>;
+  }>;
+
+  // Initialize aggregates
+  const byDayMap = new Map<
+    string,
+    { generated: number; copied: number; whatsappClicked: number }
+  >();
+  const bySurfaceMap = new Map<
+    "kanban_card" | "order_detail",
+    { generated: number; copied: number; whatsappClicked: number }
+  >();
+
+  bySurfaceMap.set("kanban_card", {
+    generated: 0,
+    copied: 0,
+    whatsappClicked: 0,
+  });
+  bySurfaceMap.set("order_detail", {
+    generated: 0,
+    copied: 0,
+    whatsappClicked: 0,
+  });
+
+  let totalGenerated = 0;
+  let totalCopied = 0;
+  let totalWhatsAppClicked = 0;
+
+  // Process events
+  for (const act of acts) {
+    const date = new Date(act.created_at);
+    const dayString = date.toISOString().split("T")[0];
+    const surface = (act.meta?.surface as "kanban_card" | "order_detail") ?? "kanban_card";
+
+    if (!byDayMap.has(dayString)) {
+      byDayMap.set(dayString, { generated: 0, copied: 0, whatsappClicked: 0 });
+    }
+
+    const dayData = byDayMap.get(dayString)!;
+    const surfaceData = bySurfaceMap.get(surface)!;
+
+    if (act.action === "smart_reply_generated") {
+      dayData.generated++;
+      surfaceData.generated++;
+      totalGenerated++;
+    } else if (act.action === "smart_reply_copied") {
+      dayData.copied++;
+      surfaceData.copied++;
+      totalCopied++;
+    } else if (act.action === "smart_reply_whatsapp_clicked") {
+      dayData.whatsappClicked++;
+      surfaceData.whatsappClicked++;
+      totalWhatsAppClicked++;
+    }
+  }
+
+  const byDay = Array.from(byDayMap.entries())
+    .map(([day, counts]) => ({
+      day,
+      ...counts,
+    }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+
+  const bySurface = Array.from(bySurfaceMap.entries())
+    .map(([surface, counts]) => ({
+      surface,
+      ...counts,
+    }))
+    .filter((s) => s.generated > 0);
+
+  const copyRate = totalGenerated > 0 ? totalCopied / totalGenerated : 0;
+  const whatsappRate = totalGenerated > 0 ? totalWhatsAppClicked / totalGenerated : 0;
+
+  return {
+    totalGenerated,
+    totalCopied,
+    totalWhatsAppClicked,
+    copyRate,
+    whatsappRate,
+    byDay,
+    bySurface,
   };
 }
 

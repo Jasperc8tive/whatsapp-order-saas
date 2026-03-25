@@ -3,6 +3,9 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { listProductAliases } from "@/lib/actions/product-aliases";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import AiCapturePageClient from "./AiCapturePageClient";
+import PlanLockedFeature from "@/components/PlanLockedFeature";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
 
 export const metadata = { title: "AI Capture Settings" };
 
@@ -11,12 +14,27 @@ export default async function AiCaptureSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Load products for alias mapping
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) redirect("/login");
+
   const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return (
+      <PlanLockedFeature
+        title="AI Capture Settings"
+        description="Webhook-based AI parsing, product alias training, and confidence routing are available on Pro only."
+        currentPlanId={currentPlanId}
+      />
+    );
+  }
+
+  // Load products for alias mapping
   const { data: products } = await admin
     .from("products")
     .select("id, name")
-    .eq("vendor_id", user.id)
+    .eq("vendor_id", workspaceId)
     .eq("is_active", true)
     .order("name", { ascending: true });
 
@@ -24,7 +42,7 @@ export default async function AiCaptureSettingsPage() {
   const { data: vendor } = await admin
     .from("users")
     .select("whatsapp_number")
-    .eq("id", user.id)
+    .eq("id", workspaceId)
     .maybeSingle();
 
   const { aliases = [] } = await listProductAliases();

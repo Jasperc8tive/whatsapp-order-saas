@@ -1,16 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useTransition, useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Order, OrderStatus } from "@/types/order";
+import type { OrderAssignment } from "@/types/team";
+import { generateSmartReplySuggestions, trackSmartReplyUsage } from "@/lib/actions/orders";
 import {
   formatCurrency,
   formatRelativeTime,
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
 } from "@/lib/utils";
+import { getOrderAssignment } from "@/lib/actions/assignments";
+import AssignmentBadge from "./AssignmentBadge";
+import AssignmentModal from "./AssignmentModal";
 
 const ALL_STATUSES: OrderStatus[] = [
   "pending",
@@ -29,17 +34,56 @@ function toWaNumber(raw: string): string {
     : digits;
 }
 
+
+
 interface KanbanCardProps {
   order: Order;
+  workspaceId?: string;
+  canUseAiSmartReplies?: boolean;
   /** When true the card is rendered inside DragOverlay — no drag listeners */
   overlay?: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   isPending?: boolean;
 }
 
-export default function KanbanCard({ order, overlay = false, onStatusChange, isPending = false }: KanbanCardProps) {
+export default function KanbanCard({
+  order,
+  workspaceId,
+  canUseAiSmartReplies = false,
+  overlay = false,
+  onStatusChange,
+  isPending = false,
+}: KanbanCardProps) {
   const [localPending, startTransition] = useTransition();
   const isUpdating = isPending || localPending;
+
+  // Assignment state
+  const [assignment, setAssignment] = useState<OrderAssignment | null>(null);
+  const [isLoadingAssignment, setIsLoadingAssignment] = useState(true);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+
+  // Smart reply state
+  const [isGeneratingReplies, startGeneratingReplies] = useTransition();
+  const [latestCustomerMessage, setLatestCustomerMessage] = useState("");
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [replyConfidence, setReplyConfidence] = useState<number | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [copiedReplyIndex, setCopiedReplyIndex] = useState<number | null>(null);
+
+  // Load assignment on mount
+  useEffect(() => {
+    async function loadAssignment() {
+      try {
+        const result = await getOrderAssignment(order.id);
+        setAssignment(result.assignment ?? null);
+      } catch (err) {
+        console.error("Failed to load assignment:", err);
+      } finally {
+        setIsLoadingAssignment(false);
+      }
+    }
+    loadAssignment();
+  }, [order.id]);
 
   function handleStatusSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const newStatus = e.target.value as OrderStatus;
@@ -63,6 +107,44 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
   const waLink = order.customer_phone
     ? `https://wa.me/${toWaNumber(order.customer_phone)}`
     : null;
+
+  function handleGenerateReplies() {
+    if (!canUseAiSmartReplies || overlay) return;
+    setReplyError(null);
+    setCopiedReplyIndex(null);
+
+    startGeneratingReplies(async () => {
+      const result = await generateSmartReplySuggestions(
+        order.id,
+        latestCustomerMessage.trim() || undefined,
+        "kanban_card"
+      );
+
+      if (result.error) {
+        setSmartReplies([]);
+        setReplyConfidence(null);
+        setReplyError(result.error);
+        return;
+      }
+
+      setSmartReplies(result.data?.suggestions ?? []);
+      setReplyConfidence(result.data?.confidence ?? null);
+    });
+  }
+
+  async function handleCopyReply(text: string, index: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedReplyIndex(index);
+      setTimeout(() => setCopiedReplyIndex((i) => (i === index ? null : i)), 1500);
+      void trackSmartReplyUsage(order.id, "copied", {
+        surface: "kanban_card",
+        suggestion_index: index,
+      });
+    } catch {
+      setReplyError("Could not copy suggestion. Copy manually instead.");
+    }
+  }
 
   return (
     <div
@@ -149,7 +231,7 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
         )}
       </div>
 
-      {/* Footer: amount + time */}
+      {/* Footer: amount + time + assignment */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-bold text-gray-900">
           {formatCurrency(order.total_amount)}
@@ -162,6 +244,18 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           {formatRelativeTime(order.created_at)}
         </div>
       </div>
+
+      {/* Assignment */}
+      {workspaceId && !overlay && (
+        <div className="flex items-center gap-1 py-2 px-2 mb-2 bg-gray-50 rounded-lg">
+          <span className="text-[10px] text-gray-500 font-medium">Assigned:</span>
+          <AssignmentBadge
+            assignment={assignment}
+            isLoading={isLoadingAssignment}
+            onClick={() => setShowAssignmentModal(true)}
+          />
+        </div>
+      )}
 
       {/* WhatsApp phone — tappable link */}
       {order.customer_phone && (
@@ -197,6 +291,108 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
         </div>
       )}
 
+      {/* Pro AI Smart Reply suggestions */}
+      {!overlay && (
+        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold text-gray-600">Smart Replies</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+              Pro
+            </span>
+          </div>
+
+          {canUseAiSmartReplies ? (
+            <>
+              <textarea
+                value={latestCustomerMessage}
+                onChange={(e) => setLatestCustomerMessage(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                rows={2}
+                placeholder="Optional: paste latest customer message"
+                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-300"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGenerateReplies();
+                }}
+                disabled={isGeneratingReplies || !order.customer_phone}
+                className="w-full rounded-lg bg-gray-900 text-white text-[11px] font-semibold py-1.5 hover:bg-gray-800 transition-colors disabled:opacity-50"
+              >
+                {isGeneratingReplies ? "Generating..." : "Generate Smart Replies"}
+              </button>
+
+              {replyConfidence !== null && (
+                <p className="text-[10px] text-gray-500">
+                  Confidence: {Math.round(replyConfidence * 100)}%
+                </p>
+              )}
+
+              {replyError && <p className="text-[10px] text-red-600">{replyError}</p>}
+
+              {smartReplies.length > 0 && (
+                <div className="space-y-1.5">
+                  {smartReplies.map((reply, index) => {
+                    const quickSendLink = waLink
+                      ? `${waLink}?text=${encodeURIComponent(reply)}`
+                      : null;
+
+                    return (
+                      <div key={`${order.id}-reply-${index}`} className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                        <p className="text-[11px] text-gray-700 leading-relaxed">{reply}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCopyReply(reply, index);
+                            }}
+                            className="text-[10px] text-gray-600 hover:text-gray-900 font-medium"
+                          >
+                            {copiedReplyIndex === index ? "Copied" : "Copy"}
+                          </button>
+                          {quickSendLink && (
+                            <a
+                              href={quickSendLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void trackSmartReplyUsage(order.id, "whatsapp_clicked", {
+                                  surface: "kanban_card",
+                                  suggestion_index: index,
+                                });
+                              }}
+                              className="text-[10px] text-green-600 hover:text-green-700 font-medium"
+                            >
+                              Use in WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+              <p className="text-[10px] text-amber-800">
+                Smart Replies are available on Pro.
+              </p>
+              <Link
+                href="/dashboard/billing?feature=smart-replies"
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 inline-block text-[10px] font-semibold text-amber-900 hover:text-amber-700"
+              >
+                Upgrade to Pro
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* View order detail */}
       <div className="pt-2 mt-1 border-t border-gray-100">
         <Link
@@ -207,6 +403,22 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           View details →
         </Link>
       </div>
+
+      {/* Assignment modal */}
+      {showAssignmentModal && workspaceId && (
+        <AssignmentModal
+          orderId={order.id}
+          workspaceId={workspaceId}
+          currentAssignment={assignment}
+          onClose={() => setShowAssignmentModal(false)}
+          onAssigned={() => {
+            // Refresh assignment data after assignment is changed
+            getOrderAssignment(order.id).then((result) => {
+              setAssignment(result.assignment ?? null);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

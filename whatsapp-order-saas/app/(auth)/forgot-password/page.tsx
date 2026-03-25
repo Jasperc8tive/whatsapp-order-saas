@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { resetPassword, type AuthState } from "@/lib/auth";
 
@@ -28,7 +29,7 @@ function SubmitButton() {
 }
 
 export default function ForgotPasswordPage() {
-  const [state, formAction] = useFormState<AuthState, FormData>(resetPassword, null);
+  const [state, formAction] = useActionState<AuthState, FormData>(resetPassword, null);
 
   return (
     <>

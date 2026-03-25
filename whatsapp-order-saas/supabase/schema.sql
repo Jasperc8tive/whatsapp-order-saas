@@ -1,5 +1,5 @@
 -- ============================================================
---  OrderFlow — Multi-tenant SaaS Schema
+--  WhatsOrder — Multi-tenant SaaS Schema
 --  Database: Supabase / PostgreSQL
 -- ============================================================
 
