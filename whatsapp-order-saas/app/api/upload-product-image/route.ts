@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 import { NextRequest, NextResponse } from "next/server";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -48,9 +49,20 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split(".").pop() || "jpg";
     const filename = `${user.id}/${timestamp}-${random}.${ext}`;
 
+    // Ensure the bucket exists and is public (uses service-role to manage buckets)
+    const admin = createAdminClient();
+    const { data: existingBuckets } = await admin.storage.listBuckets();
+    const bucketExists = existingBuckets?.some((b) => b.name === "product-images");
+    if (!bucketExists) {
+      await admin.storage.createBucket("product-images", { public: true });
+    } else {
+      // Make sure it is public in case it was created as private
+      await admin.storage.updateBucket("product-images", { public: true });
+    }
+
     // Upload to Supabase storage
     const buffer = await file.arrayBuffer();
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await admin.storage
       .from("product-images")
       .upload(filename, buffer, {
         contentType: file.type,
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get public URL
-    const { data } = supabase.storage
+    const { data } = admin.storage
       .from("product-images")
       .getPublicUrl(filename);
 
