@@ -47,6 +47,14 @@ export interface SmartReplySuggestionResult {
 
 export type SmartReplyUsageEvent = "generated" | "copied" | "whatsapp_clicked";
 
+export type SentimentType = "positive" | "neutral" | "negative";
+
+export interface SentimentAnalysisResult {
+  sentiment: SentimentType;
+  confidence: number;
+  reason?: string;
+}
+
 const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 function getSmartReplyClient(): OpenAI {
@@ -661,6 +669,83 @@ export async function generateOrderSummary(
       },
     });
     return { data: fallbackSummary };
+    }
+  }
+
+  export async function analyzeSentiment(
+    customerMessage: string
+  ): Promise<{ data?: SentimentAnalysisResult; error?: string }> {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated." };
+
+    const workspaceId = await getCurrentWorkspaceId(user.id);
+    if (!workspaceId) return { error: "Could not determine your workspace." };
+
+    const admin = createAdminClient();
+    const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+    if (!hasAiInboxCopilotAccess(currentPlanId)) {
+      return { error: "Sentiment analysis is available on the Pro plan only." };
+    }
+
+    const trimmed = customerMessage.trim();
+    if (!trimmed || trimmed.length < 3) {
+      return { error: "Message too short to analyze." };
+    }
+
+    try {
+      const client = getSmartReplyClient();
+      const completion = await client.chat.completions.create({
+        model: SMART_REPLY_MODEL,
+        temperature: 0.2,
+        max_tokens: 100,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "Analyze the sentiment of a customer message. Return strict JSON only with keys: sentiment (positive/neutral/negative), confidence (0-1), and reason (brief phrase, max 30 chars).",
+          },
+          {
+            role: "user",
+            content: customerMessage,
+          },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content ?? "";
+      const parsed = JSON.parse(raw) as {
+        sentiment?: string;
+        confidence?: number;
+        reason?: string;
+      };
+
+      const sentiment = (
+        ["positive", "neutral", "negative"].includes(parsed.sentiment ?? "")
+          ? (parsed.sentiment as SentimentType)
+          : "neutral"
+      );
+      const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0.7)));
+      const reason = (parsed.reason ?? "").slice(0, 30);
+
+      return {
+        data: {
+          sentiment,
+          confidence,
+          reason: reason || undefined,
+        },
+      };
+    } catch {
+      return {
+        data: {
+          sentiment: "neutral",
+          confidence: 0.0,
+          reason: "Analysis unavailable",
+        },
+      };
+    }
+  }
+
   }
 }
 
