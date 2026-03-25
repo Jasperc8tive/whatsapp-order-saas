@@ -268,7 +268,7 @@ export default function ProductsClient({
           Highlighted product from AI recommendation.
         </div>
       )}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Products</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -279,7 +279,7 @@ export default function ProductsClient({
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           + Add Product
         </button>

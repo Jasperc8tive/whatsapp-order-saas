@@ -155,7 +155,7 @@ export default function NewOrderModal({
     <>
       <button
         onClick={openModal}
-        className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+        className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
       >
         + New Order
       </button>
@@ -165,7 +165,7 @@ export default function NewOrderModal({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold text-gray-800">
@@ -257,21 +257,21 @@ export default function NewOrderModal({
                   </div>
                   <div className="space-y-2">
                     {items.map((item, idx) => (
-                      <div key={idx} className="flex gap-2 items-start">
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-start">
                         <input value={item.product_name}
                           onChange={(e) => updateItem(idx, "product_name", e.target.value)}
                           placeholder="Product name" autoComplete="off"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                          className="col-span-12 sm:col-span-6 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                         <input value={item.quantity} type="number" min="1"
                           onChange={(e) => updateItem(idx, "quantity", e.target.value)}
-                          className="w-16 border border-gray-200 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-500" />
+                          className="col-span-4 sm:col-span-2 border border-gray-200 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-500" />
                         <input value={item.price === 0 ? "" : item.price} type="number" min="0" step="0.01"
                           onChange={(e) => updateItem(idx, "price", e.target.value)}
                           placeholder="Price"
-                          className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                          className="col-span-8 sm:col-span-3 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                         {items.length > 1 && (
                           <button type="button" onClick={() => removeItem(idx)}
-                            className="text-gray-400 hover:text-red-500 mt-2 text-lg leading-none">&times;</button>
+                            className="col-span-12 sm:col-span-1 text-gray-400 hover:text-red-500 h-10 sm:h-auto text-lg leading-none">&times;</button>
                         )}
                       </div>
                     ))}

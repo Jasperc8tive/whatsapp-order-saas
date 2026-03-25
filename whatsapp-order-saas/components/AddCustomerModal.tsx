@@ -67,7 +67,7 @@ export default function AddCustomerModal({ vendorId }: { vendorId: string }) {
       {/* Trigger button */}
       <button
         onClick={openModal}
-        className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+        className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
       >
         + Add Customer
       </button>

@@ -169,17 +169,19 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Order Board</h2>
           <p className="text-sm text-gray-500 mt-0.5">
             Drag cards between columns to update order status
           </p>
         </div>
-        <NewOrderModal
-          vendorId={user?.id ?? ""}
-          canUseAiAutofill={canUseAiAutofill}
-        />
+        <div className="w-full sm:w-auto">
+          <NewOrderModal
+            vendorId={user?.id ?? ""}
+            canUseAiAutofill={canUseAiAutofill}
+          />
+        </div>
       </div>
 
       <KanbanBoard

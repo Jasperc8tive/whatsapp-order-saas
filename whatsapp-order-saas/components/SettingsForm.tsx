@@ -19,7 +19,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
+      className="w-full sm:w-auto justify-center bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
     >
       {pending && (
         <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -81,8 +81,8 @@ export default function SettingsForm({
             <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
               Store URL Slug <span className="text-red-400">*</span>
             </label>
-            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
-              <span className="bg-gray-50 px-3 py-2 text-sm text-gray-500 border-r border-gray-300 whitespace-nowrap">
+            <div className="flex flex-col sm:flex-row sm:items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
+              <span className="bg-gray-50 px-3 py-2 text-sm text-gray-500 border-b sm:border-b-0 sm:border-r border-gray-300 break-all sm:break-normal sm:whitespace-nowrap">
                 {siteOrigin.replace(/\/$/, "")}/order/
               </span>
               <input
@@ -91,7 +91,7 @@ export default function SettingsForm({
                 type="text"
                 defaultValue={slug}
                 required
-                className="flex-1 px-3 py-2 text-sm focus:outline-none"
+                className="w-full sm:flex-1 px-3 py-2 text-sm focus:outline-none"
               />
             </div>
             <p className="text-xs text-gray-400 mt-1">Only lowercase letters, numbers and hyphens.</p>
