@@ -1,10 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 import { formatCurrency, formatDate, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "@/lib/utils";
 import type { OrderStatus } from "@/types/order";
 import OrderStatusSelect from "./OrderStatusSelect";
 import OrderAssignmentPanel from "./OrderAssignmentPanel";
+import OrderSmartRepliesPanel from "./OrderSmartRepliesPanel";
 import { getOrderAssignment, listAssignableMembers } from "@/lib/actions/assignments";
 
 interface Props {
@@ -16,14 +20,20 @@ export default async function OrderDetailPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) notFound();
+
   const { data: order, error } = await supabase
     .from("orders")
     .select("*")
     .eq("id", params.id)
-    .eq("vendor_id", user.id)
+    .eq("vendor_id", workspaceId)
     .single();
 
   if (error || !order) notFound();
+
+  const currentPlanId = await getWorkspacePlan(createAdminClient(), workspaceId);
+  const canUseAiSmartReplies = hasAiInboxCopilotAccess(currentPlanId);
 
   const customerId = (order.customer_id as string | null) ?? null;
 
@@ -197,6 +207,12 @@ export default async function OrderDetailPage({ params }: Props) {
           ))}
         </div>
       )}
+
+      <OrderSmartRepliesPanel
+        orderId={order.id}
+        customerPhone={customer?.phone ?? ""}
+        canUseAiSmartReplies={canUseAiSmartReplies}
+      />
 
       {/* Assignment */}
       <OrderAssignmentPanel

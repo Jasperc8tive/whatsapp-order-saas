@@ -6,7 +6,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Order, OrderStatus } from "@/types/order";
 import type { OrderAssignment } from "@/types/team";
-import { generateSmartReplySuggestions } from "@/lib/actions/orders";
+import { generateSmartReplySuggestions, trackSmartReplyUsage } from "@/lib/actions/orders";
 import {
   formatCurrency,
   formatRelativeTime,
@@ -116,7 +116,8 @@ export default function KanbanCard({
     startGeneratingReplies(async () => {
       const result = await generateSmartReplySuggestions(
         order.id,
-        latestCustomerMessage.trim() || undefined
+        latestCustomerMessage.trim() || undefined,
+        "kanban_card"
       );
 
       if (result.error) {
@@ -136,6 +137,10 @@ export default function KanbanCard({
       await navigator.clipboard.writeText(text);
       setCopiedReplyIndex(index);
       setTimeout(() => setCopiedReplyIndex((i) => (i === index ? null : i)), 1500);
+      void trackSmartReplyUsage(order.id, "copied", {
+        surface: "kanban_card",
+        suggestion_index: index,
+      });
     } catch {
       setReplyError("Could not copy suggestion. Copy manually instead.");
     }
@@ -352,7 +357,13 @@ export default function KanbanCard({
                               href={quickSendLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void trackSmartReplyUsage(order.id, "whatsapp_clicked", {
+                                  surface: "kanban_card",
+                                  suggestion_index: index,
+                                });
+                              }}
                               className="text-[10px] text-green-600 hover:text-green-700 font-medium"
                             >
                               Use in WhatsApp

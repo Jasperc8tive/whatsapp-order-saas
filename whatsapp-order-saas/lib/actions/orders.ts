@@ -45,6 +45,8 @@ export interface SmartReplySuggestionResult {
   confidence: number;
 }
 
+export type SmartReplyUsageEvent = "generated" | "copied" | "whatsapp_clicked";
+
 const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 function getSmartReplyClient(): OpenAI {
@@ -350,7 +352,8 @@ export async function autofillManualOrderFromChat(
 
 export async function generateSmartReplySuggestions(
   orderId: string,
-  customerMessage?: string
+  customerMessage?: string,
+  surface: "kanban_card" | "order_detail" = "kanban_card"
 ): Promise<{ data?: SmartReplySuggestionResult; error?: string }> {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -441,14 +444,103 @@ export async function generateSmartReplySuggestions(
       .slice(0, 3);
 
     if (suggestions.length < 3) {
-      return { data: { suggestions: fallback, confidence: 0.55 } };
+      const data = { suggestions: fallback, confidence: 0.55 };
+      await logActivity({
+        workspaceId,
+        actorId: user.id,
+        entityType: "order",
+        entityId: orderId,
+        action: "smart_reply_generated",
+        meta: {
+          source: "fallback",
+          surface,
+          confidence: data.confidence,
+          suggestions_count: data.suggestions.length,
+        },
+      });
+      return { data };
     }
 
     const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0.78)));
+    await logActivity({
+      workspaceId,
+      actorId: user.id,
+      entityType: "order",
+      entityId: orderId,
+      action: "smart_reply_generated",
+      meta: {
+        source: "ai",
+        surface,
+        confidence,
+        suggestions_count: suggestions.length,
+      },
+    });
+
     return { data: { suggestions, confidence } };
   } catch {
-    return { data: { suggestions: fallback, confidence: 0.42 } };
+    const data = { suggestions: fallback, confidence: 0.42 };
+    await logActivity({
+      workspaceId,
+      actorId: user.id,
+      entityType: "order",
+      entityId: orderId,
+      action: "smart_reply_generated",
+      meta: {
+        source: "fallback_error",
+        surface,
+        confidence: data.confidence,
+        suggestions_count: data.suggestions.length,
+      },
+    });
+    return { data };
   }
+}
+
+export async function trackSmartReplyUsage(
+  orderId: string,
+  event: SmartReplyUsageEvent,
+  meta?: Record<string, unknown>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) return { ok: false, error: "Could not determine your workspace." };
+
+  const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { ok: false, error: "Smart replies are available on the Pro plan only." };
+  }
+
+  const { data: orderRow } = await admin
+    .from("orders")
+    .select("id, vendor_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!orderRow || orderRow.vendor_id !== workspaceId) {
+    return { ok: false, error: "Order not found or not in your workspace." };
+  }
+
+  const action =
+    event === "copied"
+      ? "smart_reply_copied"
+      : event === "whatsapp_clicked"
+      ? "smart_reply_whatsapp_clicked"
+      : "smart_reply_generated";
+
+  await logActivity({
+    workspaceId,
+    actorId: user.id,
+    entityType: "order",
+    entityId: orderId,
+    action,
+    meta: meta ?? {},
+  });
+
+  return { ok: true };
 }
 
 //  Update order status (kanban drag) 
