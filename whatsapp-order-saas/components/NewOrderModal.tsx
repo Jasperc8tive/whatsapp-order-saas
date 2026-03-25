@@ -46,6 +46,7 @@ export default function NewOrderModal({
     if (!recommendedProductName) return;
 
     const recommendedProductPrice = Number(searchParams.get("recommendedProductPrice") ?? "0");
+    const recommendedQuantity     = Math.max(1, parseInt(searchParams.get("recommendedQuantity") ?? "1") || 1);
     const recommendedCustomerName = searchParams.get("recommendedCustomerName") ?? "";
     const recommendedCustomerPhone = searchParams.get("recommendedCustomerPhone") ?? "";
 
@@ -56,7 +57,7 @@ export default function NewOrderModal({
       setItems([
         {
           product_name: recommendedProductName,
-          quantity: 1,
+          quantity: recommendedQuantity,
           price: Number.isFinite(recommendedProductPrice) ? recommendedProductPrice : 0,
         },
       ]);
@@ -71,6 +72,7 @@ export default function NewOrderModal({
     params.delete("recommendedProductId");
     params.delete("recommendedProductName");
     params.delete("recommendedProductPrice");
+    params.delete("recommendedQuantity");
     params.delete("recommendedCustomerName");
     params.delete("recommendedCustomerPhone");
     params.delete("recommendationSource");

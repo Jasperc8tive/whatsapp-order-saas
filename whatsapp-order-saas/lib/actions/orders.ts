@@ -61,6 +61,7 @@ export interface ProductRecommendation {
   price: number;
   reason: string;
   confidence: number;
+  suggestedQuantity: number;   // derived from customer's past order quantities
 }
 
 export interface ProductRecommendationsResult {
@@ -68,7 +69,7 @@ export interface ProductRecommendationsResult {
   confidence: number;
 }
 
-export type ProductRecommendationUsageEvent = "impression" | "accepted";
+export type ProductRecommendationUsageEvent = "impression" | "accepted" | "catalog_click";
 
 const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
@@ -406,8 +407,23 @@ export async function generateProductRecommendations(
 
   const { data: pastItems } = await admin
     .from("order_items")
-    .select("product_name")
+    .select("product_name, quantity")
     .in("order_id", pastOrders.map((order) => order.id as string));
+
+  // Build a map of product name (lowercase) → list of past quantities for suggested qty
+  const qtyHistoryMap = new Map<string, number[]>();
+  for (const item of pastItems ?? []) {
+    const key = (item.product_name as string).toLowerCase();
+    if (!qtyHistoryMap.has(key)) qtyHistoryMap.set(key, []);
+    qtyHistoryMap.get(key)!.push(Number(item.quantity ?? 1));
+  }
+
+  function historicalAvgQty(productName: string): number {
+    const qtys = qtyHistoryMap.get(productName.toLowerCase()) ?? [];
+    if (!qtys.length) return 1;
+    const avg = qtys.reduce((s, q) => s + q, 0) / qtys.length;
+    return Math.max(1, Math.round(avg));
+  }
 
   const purchaseHistory = (pastItems ?? [])
     .map((item) => item.product_name)
@@ -480,6 +496,7 @@ export async function generateProductRecommendations(
         price: productById.get(recommendation.productId ?? "") ?? 0,
         reason: (recommendation.reason ?? "").slice(0, 100),
         confidence: Math.max(0, Math.min(1, Number(recommendation.confidence ?? 0.7))),
+        suggestedQuantity: historicalAvgQty(recommendation.productName ?? ""),
       }))
       .filter((recommendation) => validProductIds.has(recommendation.productId))
       .slice(0, 3);
@@ -555,15 +572,17 @@ export async function trackProductRecommendationUsage(
     return { ok: false, error: "Customer not found or not in your workspace." };
   }
 
+  const actionName =
+    event === "accepted"      ? "product_recommendation_accepted" :
+    event === "catalog_click" ? "product_recommendation_catalog_click" :
+                                "product_recommendation_impression";
+
   await logActivity({
     workspaceId,
     actorId: user.id,
     entityType: "customer",
     entityId: customerId,
-    action:
-      event === "accepted"
-        ? "product_recommendation_accepted"
-        : "product_recommendation_impression",
+    action: actionName,
     meta: meta ?? {},
   });
 

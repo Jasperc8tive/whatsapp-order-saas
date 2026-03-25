@@ -23,6 +23,20 @@ export interface RecentOrder {
   createdAt: string;
 }
 
+export interface RecommendationAnalytics {
+  totalImpressions: number;      // times the panel showed results
+  totalAccepts: number;          // "Add To New Order" clicks
+  totalCatalogClicks: number;    // "View Product" clicks
+  acceptRate: number;            // accepts / impressions
+  catalogClickRate: number;      // catalog_clicks / impressions
+  byDay: Array<{
+    day: string;                 // YYYY-MM-DD
+    impressions: number;
+    accepts: number;
+    catalogClicks: number;
+  }>;
+}
+
 export interface SmartReplyAnalytics {
   totalGenerated: number;
   totalCopied: number;
@@ -276,6 +290,71 @@ export async function getSmartReplyAnalytics(
     whatsappRate,
     byDay,
     bySurface,
+  };
+}
+
+/**
+ * Fetch Product Recommendation funnel analytics for the last 7 days.
+ */
+export async function getRecommendationAnalytics(
+  supabase: SupabaseClient,
+  vendorId: string
+): Promise<RecommendationAnalytics> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+
+  const { data: activities } = await supabase
+    .from("activity_logs")
+    .select("action, created_at")
+    .eq("workspace_id", vendorId)
+    .in("action", [
+      "product_recommendation_impression",
+      "product_recommendation_accepted",
+      "product_recommendation_catalog_click",
+    ])
+    .gte("created_at", sevenDaysAgo.toISOString())
+    .order("created_at", { ascending: true });
+
+  const acts = (activities ?? []) as Array<{
+    action: string;
+    created_at: string;
+  }>;
+
+  const byDayMap = new Map<
+    string,
+    { impressions: number; accepts: number; catalogClicks: number }
+  >();
+
+  let totalImpressions    = 0;
+  let totalAccepts        = 0;
+  let totalCatalogClicks  = 0;
+
+  for (const act of acts) {
+    const dayString = new Date(act.created_at).toISOString().split("T")[0];
+    if (!byDayMap.has(dayString)) {
+      byDayMap.set(dayString, { impressions: 0, accepts: 0, catalogClicks: 0 });
+    }
+    const d = byDayMap.get(dayString)!;
+    if (act.action === "product_recommendation_impression") {
+      d.impressions++; totalImpressions++;
+    } else if (act.action === "product_recommendation_accepted") {
+      d.accepts++; totalAccepts++;
+    } else if (act.action === "product_recommendation_catalog_click") {
+      d.catalogClicks++; totalCatalogClicks++;
+    }
+  }
+
+  const byDay = Array.from(byDayMap.entries())
+    .map(([day, counts]) => ({ day, ...counts }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+
+  return {
+    totalImpressions,
+    totalAccepts,
+    totalCatalogClicks,
+    acceptRate:       totalImpressions > 0 ? totalAccepts       / totalImpressions : 0,
+    catalogClickRate: totalImpressions > 0 ? totalCatalogClicks / totalImpressions : 0,
+    byDay,
   };
 }
 

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
-import { getDashboardStats, getRecentOrders, getSmartReplyAnalytics } from "@/lib/analytics";
+import { getDashboardStats, getRecentOrders, getSmartReplyAnalytics, getRecommendationAnalytics } from "@/lib/analytics";
 import { formatCurrency, formatRelativeTime, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "@/lib/utils";
 import { SmartReplyAnalyticsWidget } from "@/components/SmartReplyAnalyticsWidget";
+import { RecommendationAnalyticsWidget } from "@/components/RecommendationAnalyticsWidget";
 import type { OrderStatus } from "@/types/order";
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -51,10 +52,11 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [stats, recentOrders, smartReplyAnalytics] = await Promise.all([
+  const [stats, recentOrders, smartReplyAnalytics, recommendationAnalytics] = await Promise.all([
     getDashboardStats(supabase, user.id),
     getRecentOrders(supabase, user.id, 6),
     getSmartReplyAnalytics(supabase, user.id),
+    getRecommendationAnalytics(supabase, user.id),
   ]);
 
   const ordersWoWLabel = stats.ordersWoW === 0
@@ -199,6 +201,9 @@ export default async function DashboardPage() {
 
       {/* ── Smart Reply Analytics ── */}
       <SmartReplyAnalyticsWidget analytics={smartReplyAnalytics} />
+
+      {/* ── Recommendation Analytics ── */}
+      <RecommendationAnalyticsWidget analytics={recommendationAnalytics} />
 
     </div>
   );

@@ -79,7 +79,8 @@ export default function ProductRecommendationsPanel({
   async function handleAcceptRecommendation(
     productId: string,
     productName: string,
-    productPrice: number
+    productPrice: number,
+    suggestedQuantity: number
   ) {
     await trackProductRecommendationUsage(customerId, "accepted", {
       surface: "order_detail",
@@ -92,6 +93,7 @@ export default function ProductRecommendationsPanel({
       recommendedProductId: productId,
       recommendedProductName: productName,
       recommendedProductPrice: String(productPrice),
+      recommendedQuantity: String(suggestedQuantity),
       recommendedCustomerName: customerName,
       recommendedCustomerPhone: customerPhone,
       recommendationSource: "order_detail",
@@ -100,7 +102,12 @@ export default function ProductRecommendationsPanel({
     router.push(`/dashboard/orders?${params.toString()}`);
   }
 
-  function handleViewProduct(productId: string) {
+  function handleViewProduct(productId: string, productName: string) {
+    void trackProductRecommendationUsage(customerId, "catalog_click", {
+      surface: "order_detail",
+      product_id: productId,
+      product_name: productName,
+    });
     router.push(`/dashboard/products?highlight=${encodeURIComponent(productId)}`);
   }
 
@@ -142,14 +149,14 @@ export default function ProductRecommendationsPanel({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => handleAcceptRecommendation(rec.productId, rec.productName, rec.price)}
+                    onClick={() => handleAcceptRecommendation(rec.productId, rec.productName, rec.price, rec.suggestedQuantity)}
                     className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
                   >
                     Add To New Order
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleViewProduct(rec.productId)}
+                    onClick={() => handleViewProduct(rec.productId, rec.productName)}
                     className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
                   >
                     View Product
