@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import OpenAI from "openai";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import {
@@ -37,6 +38,69 @@ export interface ManualOrderAutofillResult {
   notes: string;
   items: Array<{ product_name: string; quantity: number; price: number }>;
   confidence: number;
+}
+
+export interface SmartReplySuggestionResult {
+  suggestions: string[];
+  confidence: number;
+}
+
+const SMART_REPLY_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+function getSmartReplyClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY env var.");
+  return new OpenAI({ apiKey });
+}
+
+function buildFallbackSmartReplies(status: OrderStatus, customerName: string): string[] {
+  const name = customerName || "there";
+
+  if (status === "pending") {
+    return [
+      `Hi ${name}, thanks for your order. We have received it and will confirm shortly.`,
+      `Hello ${name}, your order is in our queue and we will update you as soon as it is confirmed.`,
+      `Thanks ${name}. We are reviewing your order now and will share the next update soon.`,
+    ];
+  }
+
+  if (status === "confirmed") {
+    return [
+      `Hi ${name}, your order is confirmed and we are preparing it now.`,
+      `Hello ${name}, payment is confirmed. We will notify you once your order is ready for dispatch.`,
+      `Thanks ${name}, your order has been confirmed and prep is underway.`,
+    ];
+  }
+
+  if (status === "processing") {
+    return [
+      `Hi ${name}, your order is currently being prepared and we will share an update soon.`,
+      `Hello ${name}, we are processing your order right now and it should be ready shortly.`,
+      `Thanks for your patience ${name}. Your order is in progress.`,
+    ];
+  }
+
+  if (status === "shipped") {
+    return [
+      `Hi ${name}, your order has been shipped and is on the way.`,
+      `Hello ${name}, dispatch is complete. Your delivery is currently in transit.`,
+      `Good news ${name}, your order is out for delivery.`,
+    ];
+  }
+
+  if (status === "delivered") {
+    return [
+      `Hi ${name}, we hope you received your order well. Thank you for choosing us.`,
+      `Hello ${name}, your order was delivered. Please let us know if everything is okay.`,
+      `Thanks ${name}. Your order is marked delivered. We appreciate your patronage.`,
+    ];
+  }
+
+  return [
+    `Hi ${name}, thanks for reaching out. We are checking your order update now.`,
+    `Hello ${name}, we are reviewing your request and will respond shortly.`,
+    `Thanks ${name}, we have noted your message and will assist right away.`,
+  ];
 }
 
 export async function createManualOrder(
@@ -282,6 +346,109 @@ export async function autofillManualOrderFromChat(
       })),
     },
   };
+}
+
+export async function generateSmartReplySuggestions(
+  orderId: string,
+  customerMessage?: string
+): Promise<{ data?: SmartReplySuggestionResult; error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) return { error: "Could not determine your workspace." };
+
+  const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { error: "Smart replies are available on the Pro plan only." };
+  }
+
+  const { data: orderRow } = await admin
+    .from("orders")
+    .select("id, vendor_id, customer_id, status, order_status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!orderRow || orderRow.vendor_id !== workspaceId) {
+    return { error: "Order not found or not in your workspace." };
+  }
+
+  const status = ((orderRow.order_status ?? orderRow.status ?? "pending") as OrderStatus);
+  const customerId = (orderRow.customer_id as string | null) ?? "";
+
+  const [{ data: customer }, { data: orderItems }, { data: vendor }] = await Promise.all([
+    customerId
+      ? admin
+          .from("customers")
+          .select("name, phone")
+          .eq("id", customerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { name: string; phone: string } | null }),
+    admin
+      .from("order_items")
+      .select("product_name, quantity")
+      .eq("order_id", orderId),
+    admin
+      .from("users")
+      .select("business_name")
+      .eq("id", workspaceId)
+      .maybeSingle(),
+  ]);
+
+  const customerName = customer?.name ?? "Customer";
+  const vendorName = vendor?.business_name ?? "our store";
+  const itemList = (orderItems ?? [])
+    .map((item) => `${Number(item.quantity ?? 1)}x ${(item.product_name as string) ?? "Item"}`)
+    .join(", ");
+
+  const fallback = buildFallbackSmartReplies(status, customerName);
+
+  try {
+    const client = getSmartReplyClient();
+    const completion = await client.chat.completions.create({
+      model: SMART_REPLY_MODEL,
+      temperature: 0.45,
+      max_tokens: 550,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You create concise WhatsApp customer support replies for order updates. Return strict JSON only with keys suggestions and confidence. suggestions must contain exactly 3 unique strings, each under 220 characters.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            customer_name: customerName,
+            vendor_name: vendorName,
+            order_status: status,
+            order_items: itemList || "Not available",
+            latest_customer_message: customerMessage?.trim() || null,
+            tone: "warm, clear, professional",
+          }),
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "";
+    const parsed = JSON.parse(raw) as { suggestions?: string[]; confidence?: number };
+
+    const suggestions = (parsed.suggestions ?? [])
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .slice(0, 3);
+
+    if (suggestions.length < 3) {
+      return { data: { suggestions: fallback, confidence: 0.55 } };
+    }
+
+    const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0.78)));
+    return { data: { suggestions, confidence } };
+  } catch {
+    return { data: { suggestions: fallback, confidence: 0.42 } };
+  }
 }
 
 //  Update order status (kanban drag) 

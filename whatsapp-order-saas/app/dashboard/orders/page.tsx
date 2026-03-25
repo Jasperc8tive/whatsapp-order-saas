@@ -81,11 +81,13 @@ export default async function OrdersPage() {
   } = await supabase.auth.getUser();
 
   let canUseAiAutofill = false;
+  let canUseAiSmartReplies = false;
   if (user) {
     const workspaceId = await getCurrentWorkspaceId(user.id);
     if (workspaceId) {
       const currentPlanId = await getWorkspacePlan(createAdminClient(), workspaceId);
       canUseAiAutofill = hasAiInboxCopilotAccess(currentPlanId);
+      canUseAiSmartReplies = hasAiInboxCopilotAccess(currentPlanId);
     }
   }
 
@@ -180,7 +182,11 @@ export default async function OrdersPage() {
         />
       </div>
 
-      <KanbanBoard initialOrders={orders} vendorId={user?.id ?? ""} />
+      <KanbanBoard
+        initialOrders={orders}
+        vendorId={user?.id ?? ""}
+        canUseAiSmartReplies={canUseAiSmartReplies}
+      />
     </div>
   );
 }
