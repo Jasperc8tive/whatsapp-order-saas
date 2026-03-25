@@ -543,6 +543,127 @@ export async function trackSmartReplyUsage(
   return { ok: true };
 }
 
+export async function generateOrderSummary(
+  orderId: string
+): Promise<{ data?: string; error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) return { error: "Could not determine your workspace." };
+
+  const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { error: "Order summaries are available on the Pro plan only." };
+  }
+
+  const { data: orderRow } = await admin
+    .from("orders")
+    .select("id, vendor_id, customer_id, status, order_status, notes, total_amount, total, created_at")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!orderRow || orderRow.vendor_id !== workspaceId) {
+    return { error: "Order not found or not in your workspace." };
+  }
+
+  const status = ((orderRow.order_status ?? orderRow.status ?? "pending") as OrderStatus);
+  const customerId = (orderRow.customer_id as string | null) ?? "";
+  const totalAmount = Number((orderRow.total_amount ?? orderRow.total ?? 0) as number);
+
+  const [{ data: customer }, { data: orderItems }, { data: vendor }] = await Promise.all([
+    customerId
+      ? admin
+          .from("customers")
+          .select("name, phone")
+          .eq("id", customerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { name: string; phone: string } | null }),
+    admin
+      .from("order_items")
+      .select("product_name, quantity, price, subtotal")
+      .eq("order_id", orderId),
+    admin
+      .from("users")
+      .select("business_name")
+      .eq("id", workspaceId)
+      .maybeSingle(),
+  ]);
+
+  const customerName = customer?.name ?? "Customer";
+  const vendorName = vendor?.business_name ?? "Our Store";
+  const itemList = (orderItems ?? [])
+    .map((item) => {
+      const qty = Number(item.quantity ?? 1);
+      const name = (item.product_name as string) ?? "Item";
+      const price = Number(item.price ?? 0);
+      return `${qty}x ${name} (${formatCurrency(price)} each)`;
+    })
+    .join(", ");
+
+  const createdDate = new Date(orderRow.created_at as string).toLocaleDateString();
+
+  const fallbackSummary = `Order #${orderId.slice(0, 8).toUpperCase()} placed on ${createdDate} for ${customerName}. Items: ${itemList || "Not specified"}. Total: ${formatCurrency(totalAmount)}. Status: ${status.charAt(0).toUpperCase() + status.slice(1)}.`;
+
+  try {
+    const client = getSmartReplyClient();
+    const completion = await client.chat.completions.create({
+      model: SMART_REPLY_MODEL,
+      temperature: 0.3,
+      max_tokens: 300,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful assistant summarizing e-commerce orders for shop managers. Provide a concise, professional one or two sentence summary of the order details.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            order_id: orderId.slice(0, 8).toUpperCase(),
+            customer_name: customerName,
+            vendor_name: vendorName,
+            items: itemList || "Not specified",
+            total_amount: formatCurrency(totalAmount),
+            status,
+            notes: (orderRow.notes as string) || null,
+            created_at: createdDate,
+          }),
+        },
+      ],
+    });
+
+    const summary = completion.choices[0]?.message?.content?.trim() ?? fallbackSummary;
+
+    await logActivity({
+      workspaceId,
+      actorId: user.id,
+      entityType: "order",
+      entityId: orderId,
+      action: "order_summary_generated",
+      meta: {
+        source: "ai",
+      },
+    });
+
+    return { data: summary };
+  } catch {
+    await logActivity({
+      workspaceId,
+      actorId: user.id,
+      entityType: "order",
+      entityId: orderId,
+      action: "order_summary_generated",
+      meta: {
+        source: "fallback_error",
+      },
+    });
+    return { data: fallbackSummary };
+  }
+}
+
 //  Update order status (kanban drag) 
 export async function updateOrderStatus(
   orderId: string,

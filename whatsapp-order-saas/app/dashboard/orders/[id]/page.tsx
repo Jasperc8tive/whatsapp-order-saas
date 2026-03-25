@@ -10,6 +10,7 @@ import OrderStatusSelect from "./OrderStatusSelect";
 import OrderAssignmentPanel from "./OrderAssignmentPanel";
 import OrderSmartRepliesPanel from "./OrderSmartRepliesPanel";
 import { getOrderAssignment, listAssignableMembers } from "@/lib/actions/assignments";
+import OrderSummaryPanel from "./OrderSummaryPanel";
 
 interface Props {
   params: { id: string };
@@ -139,6 +140,9 @@ export default async function OrderDetailPage({ params }: Props) {
           </div>
         </div>
       )}
+  {/* Order Summary */}
+  <OrderSummaryPanel orderId={order.id} canUseAiSummary={canUseAiSmartReplies} />
+
 
       {/* Order items */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
