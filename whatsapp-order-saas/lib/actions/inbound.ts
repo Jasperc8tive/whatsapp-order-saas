@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { parseOrderFromMessage, type CatalogItem } from "@/lib/ai-parse";
 import { sendTextMessage } from "@/lib/whatsapp";
 import { enqueueJob } from "@/lib/jobs";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
 
 export async function processInboundMessage(
   eventId: string,
@@ -23,6 +24,16 @@ export async function processInboundMessage(
   messageText: string
 ): Promise<void> {
   const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    console.info(`[inbound] Skipping AI parsing for workspace ${workspaceId} on ${currentPlanId} plan.`);
+    await sendTextMessage(
+      fromPhone,
+      "👋 Hi! We received your message and our team will review it shortly."
+    ).catch(() => {/* fire-and-forget */});
+    return;
+  }
 
   // 1. Load product catalog for this workspace
   const { data: products } = await admin
