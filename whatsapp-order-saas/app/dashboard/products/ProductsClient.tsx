@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -156,13 +157,14 @@ function ProductForm({
   );
 }
 
-function ProductCard({ product, highlighted }: { product: Product; highlighted?: boolean }) {
+function ProductCard({ product, highlighted, onSave }: { product: Product; highlighted?: boolean; onSave: () => void }) {
   const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function toggle() {
     startTransition(async () => {
       await toggleProductActive(product.id, !product.is_active);
+      onSave();
     });
   }
 
@@ -170,6 +172,7 @@ function ProductCard({ product, highlighted }: { product: Product; highlighted?:
     if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
     startTransition(async () => {
       await deleteProduct(product.id);
+      onSave();
     });
   }
 
@@ -177,7 +180,7 @@ function ProductCard({ product, highlighted }: { product: Product; highlighted?:
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h3 className="text-sm font-semibold text-gray-800 mb-4">Edit Product</h3>
-        <ProductForm editing={product} onClose={() => setEditing(false)} />
+        <ProductForm editing={product} onClose={() => { setEditing(false); onSave(); }} />
       </div>
     );
   }
@@ -243,7 +246,13 @@ export default function ProductsClient({
   initialProducts: Product[];
   highlightProductId?: string;
 }) {
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
+
+  function closeAndRefresh() {
+    setShowForm(false);
+    router.refresh();
+  }
 
   useEffect(() => {
     if (!highlightProductId) return;
@@ -280,7 +289,7 @@ export default function ProductsClient({
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">New Product</h3>
-          <ProductForm onClose={() => setShowForm(false)} />
+          <ProductForm onClose={closeAndRefresh} />
         </div>
       )}
 
@@ -305,6 +314,7 @@ export default function ProductsClient({
               key={p.id}
               product={p}
               highlighted={p.id === highlightProductId}
+              onSave={closeAndRefresh}
             />
           ))}
         </div>
