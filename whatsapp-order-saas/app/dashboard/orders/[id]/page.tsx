@@ -136,24 +136,33 @@ export default async function OrderDetailPage({ params }: Props) {
             <div className="space-y-0.5">
               <p className="text-sm font-semibold text-gray-800">{customer.name}</p>
               <p className="text-sm text-gray-500">{customer.phone}</p>
-                            {order.notes && (
-                              <div className="pt-2 mt-2 border-t border-gray-200">
-                                <p className="text-xs text-gray-500 mb-2 font-medium">Customer Message:</p>
-                                <p className="text-sm text-gray-700 mb-3 italic">{order.notes}</p>
-                                <CustomerSentimentAnalyzer
-                                  customerMessage={order.notes as string}
-                                  canUseAiFeatures={canUseAiSmartReplies}
-                                />
-                              </div>
-                            )}
+              {order.notes && (
+                <div className="pt-2 mt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">Customer Message:</p>
+                  <p className="text-sm text-gray-700 mb-3 italic">{order.notes}</p>
+                  <CustomerSentimentAnalyzer
+                    customerMessage={order.notes as string}
+                    canUseAiFeatures={canUseAiSmartReplies}
+                  />
+                </div>
+              )}
               {customer.email && <p className="text-sm text-gray-500">{customer.email}</p>}
               {customer.address && <p className="text-sm text-gray-500">{customer.address}</p>}
             </div>
           </div>
         </div>
       )}
-  {/* Order Summary */}
-  <OrderSummaryPanel orderId={order.id} canUseAiSummary={canUseAiSmartReplies} />
+
+      {/* Order Summary */}
+      <OrderSummaryPanel orderId={order.id} canUseAiSummary={canUseAiSmartReplies} />
+
+      {/* Product Recommendations */}
+      {customer && (
+        <ProductRecommendationsPanel
+          customerId={customer.id}
+          canUseAiFeatures={canUseAiSmartReplies}
+        />
+      )}
 
 
       {/* Order items */}
