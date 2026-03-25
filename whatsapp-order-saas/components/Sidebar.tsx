@@ -80,6 +80,7 @@ const navItems = [
   {
     label: "AI Drafts",
     href: "/dashboard/drafts",
+    proOnly: true,
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -142,6 +143,7 @@ const navItems = [
 
 export default function Sidebar({ vendor, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const isProPlan = vendor?.plan === "pro";
 
   const initials = vendor?.business_name
     ? vendor.business_name.slice(0, 2).toUpperCase()
@@ -202,7 +204,21 @@ export default function Sidebar({ vendor, isOpen = false, onClose }: SidebarProp
               )}
             >
               {item.icon}
-              {item.label}
+              <span className="flex items-center gap-2">
+                {item.label}
+                {(item as { proOnly?: boolean }).proOnly && (
+                  <span
+                    className={classNames(
+                      "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                      isProPlan
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : "bg-amber-500/20 text-amber-300"
+                    )}
+                  >
+                    Pro
+                  </span>
+                )}
+              </span>
             </Link>
           );
         })}

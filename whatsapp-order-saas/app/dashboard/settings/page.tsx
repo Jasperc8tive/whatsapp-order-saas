@@ -14,7 +14,7 @@ export default async function SettingsPage() {
 
 	const { data: vendor, error } = await supabase
 		.from("users")
-		.select("business_name, slug, phone")
+		.select("business_name, slug, phone, plan")
 		.eq("id", user.id)
 		.single();
 
@@ -28,6 +28,7 @@ export default async function SettingsPage() {
 			slug={vendor?.slug ?? ""}
 			siteOrigin={siteOrigin}
 			whatsappNumber={vendor?.phone ?? null}
+			currentPlan={(vendor?.plan as string | undefined) ?? "starter"}
 		/>
 	);
 }

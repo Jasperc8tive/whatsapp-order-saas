@@ -3,11 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
-import { checkPlanLimit, DEFAULT_PLAN, type PlanId } from "@/lib/plans";
+import {
+  checkPlanLimit,
+  DEFAULT_PLAN,
+  getWorkspacePlan,
+  hasAiInboxCopilotAccess,
+  type PlanId,
+} from "@/lib/plans";
 import type { OrderStatus } from "@/types/order";
 import { notifyOrderCreated, notifyOrderShipped } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { enqueueJob } from "@/lib/jobs";
+import { parseOrderFromMessage, type CatalogItem } from "@/lib/ai-parse";
 import {
   getCurrentWorkspaceId,
   getCurrentWorkspaceRole,
@@ -22,6 +29,14 @@ export interface ManualOrderInput {
   phone: string;
   items: Array<{ product_name: string; quantity: number; price: number }>;
   notes?: string;
+}
+
+export interface ManualOrderAutofillResult {
+  customerName: string;
+  phone: string;
+  notes: string;
+  items: Array<{ product_name: string; quantity: number; price: number }>;
+  confidence: number;
 }
 
 export async function createManualOrder(
@@ -178,6 +193,95 @@ export async function createManualOrder(
 
   revalidatePath("/dashboard/orders");
   return { orderId: order.id };
+}
+
+function extractPhoneFromText(text: string): string {
+  const matches = text.match(/(\+?\d[\d\s()-]{8,}\d)/g);
+  if (!matches || matches.length === 0) return "";
+
+  const normalized = matches[0].replace(/[^\d+]/g, "");
+  return normalized.startsWith("+") ? normalized : normalized;
+}
+
+export async function autofillManualOrderFromChat(
+  chatText: string
+): Promise<{ data?: ManualOrderAutofillResult; error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  if (!(await canWriteOrder(user.id))) {
+    return { error: "Only workspace owner and staff can create orders." };
+  }
+
+  const trimmed = chatText.trim();
+  if (!trimmed) return { error: "Paste a customer message to use AI autofill." };
+
+  const workspaceId = await getCurrentWorkspaceId(user.id);
+  if (!workspaceId) return { error: "Could not determine your workspace." };
+
+  const admin = createAdminClient();
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { error: "Chat-to-order autofill is available on the Pro plan only." };
+  }
+
+  const { data: products } = await admin
+    .from("products")
+    .select("id, name, price")
+    .eq("vendor_id", workspaceId)
+    .eq("is_active", true);
+
+  if (!products || products.length === 0) {
+    return { error: "No active products found. Add products first before using AI autofill." };
+  }
+
+  const { data: aliasRows } = await admin
+    .from("product_aliases")
+    .select("product_id, alias")
+    .eq("workspace_id", workspaceId);
+
+  const aliasMap: Record<string, string[]> = {};
+  for (const row of aliasRows ?? []) {
+    const pid = row.product_id as string;
+    if (!aliasMap[pid]) aliasMap[pid] = [];
+    aliasMap[pid].push(row.alias as string);
+  }
+
+  const catalog: CatalogItem[] = (products ?? []).map((p) => ({
+    id: p.id as string,
+    name: p.name as string,
+    aliases: aliasMap[p.id as string] ?? [],
+    price: Number(p.price ?? 0),
+  }));
+
+  const result = await parseOrderFromMessage(trimmed, catalog);
+  if (!result.items.length) {
+    return {
+      error:
+        result.clarification_question ??
+        "Could not confidently extract order items from this message. Please edit manually.",
+    };
+  }
+
+  const priceMap: Record<string, number> = {};
+  for (const p of products ?? []) priceMap[p.id as string] = Number(p.price ?? 0);
+
+  const detectedPhone = extractPhoneFromText(trimmed);
+
+  return {
+    data: {
+      customerName: result.customer_name ?? "",
+      phone: detectedPhone,
+      notes: result.notes ?? "",
+      confidence: result.confidence,
+      items: result.items.map((item) => ({
+        product_name: item.product_name,
+        quantity: item.quantity,
+        price: priceMap[item.product_id] ?? 0,
+      })),
+    },
+  };
 }
 
 //  Update order status (kanban drag) 
