@@ -43,6 +43,8 @@ function ProductForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState(editing?.image_url || "");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   const action = editing
     ? updateProduct.bind(null, editing.id)
@@ -62,6 +64,8 @@ function ProductForm({
 
     setImageFile(file);
     setIsUploadingImage(true);
+    setUploadError(null);
+    setUploadSuccess(null);
 
     try {
       // Create a FormData to send file to our upload endpoint
@@ -75,7 +79,7 @@ function ProductForm({
 
       if (!response.ok) {
         const error = await response.json();
-        alert("Failed to upload image: " + (error.message || "Unknown error"));
+        setUploadError("Failed to upload image: " + (error.message || "Unknown error"));
         setImageFile(null);
         setIsUploadingImage(false);
         return;
@@ -83,9 +87,10 @@ function ProductForm({
 
       const data = await response.json();
       setImageUrl(data.imageUrl);
+      setUploadSuccess("Image uploaded successfully.");
     } catch (error) {
       console.error("Image upload error:", error);
-      alert("Failed to upload image");
+      setUploadError("Failed to upload image");
       setImageFile(null);
     } finally {
       setIsUploadingImage(false);
@@ -143,6 +148,8 @@ function ProductForm({
             hover:file:bg-gray-100 disabled:opacity-50"
         />
         {isUploadingImage && <p className="text-xs text-gray-500 mt-2">Uploading image...</p>}
+        {uploadError && <p className="text-xs text-red-600 mt-2">{uploadError}</p>}
+        {uploadSuccess && <p className="text-xs text-green-600 mt-2">{uploadSuccess}</p>}
       </div>
       <div className="flex gap-3 pt-1">
         <button type="button" onClick={onClose}
