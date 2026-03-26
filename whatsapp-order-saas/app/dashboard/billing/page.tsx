@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
-import { PLANS, DEFAULT_PLAN, getMonthOrderCount, type PlanId } from "@/lib/plans";
+import { PLANS, DEFAULT_PLAN, getMonthOrderCount, resolvePlanId, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/utils";
 
 // ── Plan card ──────────────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ function UsageMeter({ used, limit, planName }: UsageMeterProps) {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams?: { upgraded?: string; error?: string };
+  searchParams?: Promise<{ upgraded?: string; error?: string; feature?: string }>;
 }) {
   const supabase = await createServerSupabaseClient();
   const {
@@ -195,10 +195,7 @@ export default async function BillingPage({
     .single();
 
   const rawPlan = (vendorRow as Record<string, unknown> | null)?.plan;
-  const planFromDb =
-    typeof rawPlan === "string" && rawPlan in PLANS
-      ? (rawPlan as PlanId)
-      : null;
+  const planFromDb = rawPlan === undefined || rawPlan === null ? null : resolvePlanId(rawPlan);
 
   const currentPlanId = (planFromDb ?? DEFAULT_PLAN) as PlanId;
   const currentPlan = PLANS[currentPlanId] ?? PLANS[DEFAULT_PLAN];
@@ -210,19 +207,26 @@ export default async function BillingPage({
 
   const planOrder: PlanId[] = ["starter", "growth", "pro"];
   const rank = (plan: PlanId) => planOrder.indexOf(plan);
+  const resolvedSearchParams = await searchParams;
 
   return (
     <div className="space-y-6 max-w-4xl">
 
-      {searchParams?.upgraded && searchParams.upgraded in PLANS && (
+      {resolvedSearchParams?.upgraded && resolvedSearchParams.upgraded in PLANS && (
         <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl px-4 py-3">
-          Plan updated successfully to <span className="font-semibold">{PLANS[searchParams.upgraded as PlanId].name}</span>.
+          Plan updated successfully to <span className="font-semibold">{PLANS[resolvedSearchParams.upgraded as PlanId].name}</span>.
         </div>
       )}
 
-      {searchParams?.error && (
+      {resolvedSearchParams?.error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-          {decodeURIComponent(searchParams.error)}
+          {decodeURIComponent(resolvedSearchParams.error)}
+        </div>
+      )}
+
+      {resolvedSearchParams?.feature === "ai-inbox-copilot" && currentPlanId !== "pro" && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-xl px-4 py-3">
+          AI Inbox Copilot, AI Drafts, and AI Capture Settings are unlocked on the <span className="font-semibold">Pro</span> plan.
         </div>
       )}
 
@@ -253,6 +257,26 @@ export default async function BillingPage({
             />
           ))}
         </div>
+      </div>
+
+      <div className="bg-slate-900 text-white rounded-2xl p-6 space-y-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold">Pro AI Upgrade</h2>
+            <p className="text-sm text-slate-300 mt-1">
+              Unlock AI Inbox Copilot, order-draft review, alias training, and future AI workflow upgrades on Pro.
+            </p>
+          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider bg-white/10 text-white px-3 py-1 rounded-full">
+            Pro only
+          </span>
+        </div>
+        <ul className="grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+          <li>AI WhatsApp message parsing into structured orders</li>
+          <li>Confidence-based draft review queue</li>
+          <li>AI Capture Settings and product alias training</li>
+          <li>Future smart replies and chat-to-order autofill</li>
+        </ul>
       </div>
 
       {/* ── Note ── */}

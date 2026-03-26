@@ -30,7 +30,7 @@ export default async function CustomersPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Customers</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -39,7 +39,9 @@ export default async function CustomersPage() {
               : `${rows.length} customer${rows.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <AddCustomerModal vendorId={user.id} />
+        <div className="w-full sm:w-auto">
+          <AddCustomerModal vendorId={user.id} />
+        </div>
       </div>
 
       {/* Empty state */}
@@ -56,7 +58,30 @@ export default async function CustomersPage() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="md:hidden divide-y divide-gray-100">
+            {rows.map((customer) => (
+              <div key={customer.id} className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                    {(customer.name?.[0] ?? "?").toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{customer.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{customer.phone}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Added {new Date(customer.created_at).toLocaleDateString("en-NG", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <table className="hidden md:table w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>

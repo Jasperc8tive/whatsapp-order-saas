@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface NavbarProps {
   title: string;
@@ -13,12 +13,7 @@ export default function Navbar({ title, vendorName, vendorSlug, onMenuClick }: N
   const initial = vendorName ? vendorName[0].toUpperCase() : "V";
   const [copied, setCopied] = useState(false);
 
-  // Derive origin client-side only — avoids SSR/hydration mismatch.
-  // Initial value matches what the server rendered (NEXT_PUBLIC_SITE_URL),
-  // then updates to window.location.origin after mount.
-  const [origin, setOrigin] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
-  useEffect(() => { setOrigin(window.location.origin); }, []);
-
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const storeUrl = vendorSlug ? `${origin}/store/${vendorSlug}` : null;
 
   async function copyStoreLink() {

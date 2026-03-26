@@ -18,7 +18,7 @@ export default function VendorNotFound() {
           href="/"
           className="inline-flex items-center gap-2 text-sm text-green-600 font-medium hover:underline"
         >
-          ← Back to OrderFlow
+          ← Back to WhatsOrder
         </Link>
       </div>
     </div>

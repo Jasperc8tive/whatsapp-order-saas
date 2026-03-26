@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       metadata: {
         order_id,
         vendor_id: order.vendor_id,
-        source: "orderflow-storefront",
+        source: "whatsorder-storefront",
       },
     });
 

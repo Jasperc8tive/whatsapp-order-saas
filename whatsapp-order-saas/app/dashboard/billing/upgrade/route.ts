@@ -97,12 +97,12 @@ export async function POST(request: Request) {
     const reference = `SUB-${user.id.replace(/-/g, "").slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
     const paystack = await initializeTransaction({
-      email: user.email ?? `user-${user.id}@orderflow.local`,
+      email: user.email ?? `user-${user.id}@whatsorder.local`,
       amount: toKobo(targetPlan.price),
       reference,
       callback_url: callbackUrl.toString(),
       metadata: {
-        source: "orderflow-billing-upgrade",
+        source: "whatsorder-billing-upgrade",
         user_id: user.id,
         current_plan: currentPlan,
         target_plan: plan,

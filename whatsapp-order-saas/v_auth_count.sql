@@ -1,0 +1,1 @@
+SELECT COUNT(*) AS auth_users FROM auth.users;

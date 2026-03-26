@@ -54,8 +54,13 @@ export async function listTeamMembers(
   const emailMap: Record<string, string> = {};
 
   for (const id of userIds) {
-    const { data: authUser } = await admin.auth.admin.getUserById(id);
-    if (authUser?.user?.email) emailMap[id] = authUser.user.email;
+    try {
+      const { data: authUser } = await admin.auth.admin.getUserById(id);
+      if (authUser?.user?.email) emailMap[id] = authUser.user.email;
+    } catch (err) {
+      // Silently skip if user lookup fails
+      console.warn(`Failed to fetch email for user ${id}:`, err);
+    }
   }
 
   const members: WorkspaceMember[] = (data ?? []).map((m) => ({

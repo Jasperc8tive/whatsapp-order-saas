@@ -1,6 +1,9 @@
 import KanbanBoard from "@/components/KanbanBoard";
 import NewOrderModal from "@/components/NewOrderModal";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
 import type { Order, OrderStatus } from "@/types/order";
 
 // ── Fallback seed data shown when Supabase returns no rows ───────────────────
@@ -76,6 +79,17 @@ export default async function OrdersPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  let canUseAiAutofill = false;
+  let canUseAiSmartReplies = false;
+  if (user) {
+    const workspaceId = await getCurrentWorkspaceId(user.id);
+    if (workspaceId) {
+      const currentPlanId = await getWorkspacePlan(createAdminClient(), workspaceId);
+      canUseAiAutofill = hasAiInboxCopilotAccess(currentPlanId);
+      canUseAiSmartReplies = hasAiInboxCopilotAccess(currentPlanId);
+    }
+  }
 
   let orders: Order[] = [];
 
@@ -155,17 +169,26 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Order Board</h2>
           <p className="text-sm text-gray-500 mt-0.5">
             Drag cards between columns to update order status
           </p>
         </div>
-        <NewOrderModal vendorId={user?.id ?? ""} />
+        <div className="w-full sm:w-auto">
+          <NewOrderModal
+            vendorId={user?.id ?? ""}
+            canUseAiAutofill={canUseAiAutofill}
+          />
+        </div>
       </div>
 
-      <KanbanBoard initialOrders={orders} vendorId={user?.id ?? ""} />
+      <KanbanBoard
+        initialOrders={orders}
+        vendorId={user?.id ?? ""}
+        canUseAiSmartReplies={canUseAiSmartReplies}
+      />
     </div>
   );
 }

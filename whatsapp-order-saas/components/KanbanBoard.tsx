@@ -24,6 +24,7 @@ import { formatCurrency } from "@/lib/utils";
 interface KanbanBoardProps {
   initialOrders: Order[];
   vendorId: string;
+  canUseAiSmartReplies?: boolean;
 }
 
 const dropAnimation: DropAnimation = {
@@ -32,7 +33,7 @@ const dropAnimation: DropAnimation = {
   }),
 };
 
-export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProps) {
+export default function KanbanBoard({ initialOrders, vendorId, canUseAiSmartReplies = false }: KanbanBoardProps) {
   const [orders, setOrders]         = useState<Order[]>(initialOrders);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
@@ -261,6 +262,8 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
               key={config.id}
               config={config}
               orders={orders.filter((o) => o.status === config.id)}
+              workspaceId={vendorId}
+              canUseAiSmartReplies={canUseAiSmartReplies}
               isAnyDragging={activeOrder !== null}
               onStatusChange={handleStatusChange}
               updatingIds={updatingIds}

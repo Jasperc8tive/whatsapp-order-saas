@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import DashboardShell from "@/components/DashboardShell";
 import { ensureVendorProfile } from "@/lib/vendorProfile";
+import { resolvePlanId } from "@/lib/plans";
 
 export default async function DashboardLayout({
   children,
@@ -21,17 +22,17 @@ export default async function DashboardLayout({
 
   const { data: vendorRow } = await supabase
     .from("users")
-    .select("business_name, slug, phone")
+    .select("business_name, slug, phone, plan")
     .eq("id", user.id)
     .single();
 
   let vendor = vendorRow
-    ? { ...vendorRow, plan: "starter" }
+    ? { ...vendorRow, plan: resolvePlanId(vendorRow.plan) }
     : null;
 
   if (!vendor) {
     const ensuredVendor = await ensureVendorProfile(user);
-    vendor = { ...ensuredVendor, plan: "starter" };
+    vendor = { ...ensuredVendor, plan: resolvePlanId(undefined) };
   }
 
   return (

@@ -6,14 +6,14 @@ import QueueHealthClient from "./QueueHealthClient";
 export const metadata = { title: "Queue Health" };
 
 interface QueuePageProps {
-  searchParams?: {
+  searchParams?: Promise<{
     page?: string;
     pageSize?: string;
     status?: "all" | "queued" | "running" | "failed" | "dead" | "done";
     q?: string;
     sortBy?: "created_at" | "run_at" | "attempts";
     sortDir?: "asc" | "desc";
-  };
+  }>;
 }
 
 export default async function QueueHealthPage({ searchParams }: QueuePageProps) {
@@ -21,12 +21,14 @@ export default async function QueueHealthPage({ searchParams }: QueuePageProps) 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const page = Number(searchParams?.page ?? "1");
-  const pageSize = Number(searchParams?.pageSize ?? "50");
-  const status = searchParams?.status ?? "all";
-  const q = searchParams?.q ?? "";
-  const sortBy = searchParams?.sortBy ?? "created_at";
-  const sortDir = searchParams?.sortDir ?? "desc";
+  const resolvedSearchParams = await searchParams;
+
+  const page = Number(resolvedSearchParams?.page ?? "1");
+  const pageSize = Number(resolvedSearchParams?.pageSize ?? "50");
+  const status = resolvedSearchParams?.status ?? "all";
+  const q = resolvedSearchParams?.q ?? "";
+  const sortBy = resolvedSearchParams?.sortBy ?? "created_at";
+  const sortDir = resolvedSearchParams?.sortDir ?? "desc";
 
   const result = await listQueueHealth({
     page: Number.isFinite(page) ? page : 1,

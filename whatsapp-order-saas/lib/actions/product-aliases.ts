@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export async function listProductAliases(): Promise<{
   // Get workspace id for this user
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   const { data, error } = await admin
     .from("product_aliases")
@@ -62,6 +65,8 @@ export async function createProductAlias(
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   const normalised = alias.trim().toLowerCase();
   if (!normalised) return { error: "Alias cannot be empty." };
@@ -91,6 +96,8 @@ export async function deleteProductAlias(aliasId: string): Promise<{ error?: str
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   const { error } = await admin
     .from("product_aliases")
@@ -126,4 +133,16 @@ async function resolveWorkspaceId(
     .eq("is_active", true)
     .maybeSingle();
   return (member?.workspace_id as string) ?? null;
+}
+
+async function assertAiAccess(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { ok: false, error: "AI Capture Settings are available on the Pro plan only." };
+  }
+
+  return { ok: true };
 }

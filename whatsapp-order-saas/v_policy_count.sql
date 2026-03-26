@@ -1,0 +1,1 @@
+SELECT tablename, COUNT(*) AS policy_count FROM pg_policies WHERE schemaname='public' GROUP BY tablename ORDER BY tablename;
