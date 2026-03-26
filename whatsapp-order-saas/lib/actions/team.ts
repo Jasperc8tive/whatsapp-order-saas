@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { logActivity } from "@/lib/activity";
+import { sendWorkspaceInvitationEmail } from "@/lib/teamInvitationDelivery";
 import type { WorkspaceRole, WorkspaceMember, WorkspaceInvitation } from "@/types/team";
 
 // ─── Helper: assert caller is owner ─────────────────────────────────────────
@@ -154,6 +155,23 @@ export async function inviteTeamMember(
 
   if (error) return { error: error.message };
 
+  const delivery = await sendWorkspaceInvitationEmail({
+    email,
+    role: role as "staff" | "delivery_manager",
+    token,
+  });
+
+  if (!delivery.ok) {
+    await admin
+      .from("workspace_invitations")
+      .delete()
+      .eq("workspace_id", ownership.workspaceId)
+      .eq("email", email)
+      .eq("token", token);
+
+    return { error: delivery.error ?? "Failed to send invitation email." };
+  }
+
   // Log activity
   await logActivity({
     workspaceId: ownership.workspaceId,
@@ -164,10 +182,6 @@ export async function inviteTeamMember(
   });
 
   revalidatePath("/dashboard/team");
-
-  // In production, send an email with the acceptance link.
-  // The acceptance URL: /team/accept?token=<token>
-  // For now we return the token so you can wire email delivery.
   return { ok: true };
 }
 

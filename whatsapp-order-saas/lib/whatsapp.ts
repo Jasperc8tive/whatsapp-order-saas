@@ -78,6 +78,13 @@ export interface OrderShippedPayload {
   trackingId?: string | null;
 }
 
+export interface DraftRejectedPayload {
+  customerName: string;
+  customerPhone: string;
+  vendorName: string;
+  reason?: string | null;
+}
+
 // ── Phone normalisation ───────────────────────────────────────────────────────
 
 /**
@@ -223,6 +230,22 @@ function buildOrderShippedMessage(p: OrderShippedPayload): string {
     .join("\n");
 }
 
+function buildDraftRejectedMessage(p: DraftRejectedPayload): string {
+  const resolvedName = p.customerName?.trim() || "there";
+  const reasonLine = p.reason?.trim()
+    ? `Reason: ${p.reason.trim()}`
+    : "Reason: We need a bit more detail before we can confirm the order.";
+
+  return [
+    `Hello ${resolvedName},`,
+    "",
+    `We could not confirm your order request with *${p.vendorName}* just yet.`,
+    reasonLine,
+    "",
+    "Please reply with the correct details or send a fresh order message and we'll help you right away.",
+  ].join("\n");
+}
+
 // ── Public notification functions ─────────────────────────────────────────────
 
 /**
@@ -261,5 +284,14 @@ export async function notifyOrderShipped(
   return sendTextMessage(
     payload.customerPhone,
     buildOrderShippedMessage(payload)
+  );
+}
+
+export async function notifyDraftRejected(
+  payload: DraftRejectedPayload
+): Promise<WhatsAppSendResult> {
+  return sendTextMessage(
+    payload.customerPhone,
+    buildDraftRejectedMessage(payload)
   );
 }

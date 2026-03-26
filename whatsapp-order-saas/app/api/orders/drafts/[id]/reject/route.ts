@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { notifyDraftRejected } from "@/lib/whatsapp";
 
 /**
  * POST /api/orders/drafts/[id]/reject
@@ -71,8 +72,18 @@ export async function POST(
       throw error;
     }
 
-    // 4. TODO: Send rejection message to customer
-    // For now, just mark as rejected in the system
+    const { data: workspace } = await admin
+      .from("users")
+      .select("business_name")
+      .eq("id", draft.workspace_id)
+      .maybeSingle();
+
+    void notifyDraftRejected({
+      customerName: (draft.customer_name as string | null) ?? (draft.customer_phone as string),
+      customerPhone: draft.customer_phone as string,
+      vendorName: (workspace?.business_name as string | undefined) ?? "our team",
+      reason,
+    });
 
     return NextResponse.json({
       success: true,
