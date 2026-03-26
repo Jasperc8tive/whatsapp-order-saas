@@ -36,7 +36,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <DashboardShell vendor={vendor}>
+    <DashboardShell vendor={vendor} userEmail={user.email}>
       {children}
     </DashboardShell>
   );
