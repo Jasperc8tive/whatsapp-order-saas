@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import AddCustomerModal from "@/components/AddCustomerModal";
+import DownloadCustomersButton from "@/components/DownloadCustomersButton";
 
 // Matches the columns that exist in the Supabase customers table
 interface CustomerRow {
@@ -39,7 +40,8 @@ export default async function CustomersPage() {
               : `${rows.length} customer${rows.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <div className="w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <DownloadCustomersButton customers={rows} />
           <AddCustomerModal vendorId={user.id} />
         </div>
       </div>
