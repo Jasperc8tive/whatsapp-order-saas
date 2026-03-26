@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { buildTeamInvitationAcceptLink, sendWorkspaceInvitationEmail } from "@/lib/teamInvitationDelivery";
 import crypto from "crypto";
 
 /**
@@ -122,9 +123,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. TODO: Send email with invitation link
-    // For now, just return the token so caller can share it
-    const acceptLink = `${process.env.SITE_URL}/dashboard/team/accept?token=${token}`;
+    const delivery = await sendWorkspaceInvitationEmail({
+      email: invitation.email as string,
+      role: invitation.role as "staff" | "delivery_manager",
+      token,
+    });
+
+    if (!delivery.ok) {
+      await admin
+        .from("workspace_invitations")
+        .delete()
+        .eq("id", invitation.id);
+
+      return NextResponse.json(
+        { error: delivery.error ?? "Failed to send invitation email" },
+        { status: 500 }
+      );
+    }
+
+    const acceptLink = buildTeamInvitationAcceptLink(token);
 
     return NextResponse.json({
       success: true,
@@ -133,7 +150,8 @@ export async function POST(request: NextRequest) {
         email: invitation.email,
         role: invitation.role,
         expiresAt: invitation.expires_at,
-        acceptLink, // In prod, this should be in email only
+        acceptLink,
+        deliveryChannel: delivery.channel,
       },
     });
   } catch (error) {

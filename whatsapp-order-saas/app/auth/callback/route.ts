@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   const code    = searchParams.get("code");
   const next    = searchParams.get("next") ?? "/dashboard";
   const errorParam = searchParams.get("error_description");
+  const isWorkspaceInviteRedirect = next.startsWith("/team/accept");
 
   if (errorParam) {
     return NextResponse.redirect(
@@ -28,7 +29,9 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser();
 
       if (user) {
-        await ensureVendorProfile(user);
+        if (!isWorkspaceInviteRedirect) {
+          await ensureVendorProfile(user);
+        }
       }
 
       return NextResponse.redirect(`${origin}${next}`);
