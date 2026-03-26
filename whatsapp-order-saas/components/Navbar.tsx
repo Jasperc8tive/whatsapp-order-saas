@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import UserProfileMenu from "./UserProfileMenu";
 
 interface NavbarProps {
   title: string;
   vendorName?: string;
   vendorSlug?: string | null;
+  userEmail?: string;
   onMenuClick?: () => void;
 }
 
-export default function Navbar({ title, vendorName, vendorSlug, onMenuClick }: NavbarProps) {
+export default function Navbar({ title, vendorName, vendorSlug, userEmail, onMenuClick }: NavbarProps) {
   const initial = vendorName ? vendorName[0].toUpperCase() : "V";
   const [copied, setCopied] = useState(false);
 
