@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { useSyncOfflineOrders } from "@/lib/useSyncOfflineOrders";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -19,18 +21,34 @@ export const metadata: Metadata = {
   description: "Manage WhatsApp orders for your business",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+function RootLayoutComponent({ children }: { children: React.ReactNode }) {
+  useSyncOfflineOrders();
+  return (
+    <>
+      <OfflineIndicator />
+      {children}
+      <SpeedInsights />
+    </>
+  );
+}
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-        <SpeedInsights />
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+              window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/service-worker.js');
+              });
+            }
+          `
+        }} />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <RootLayoutComponent>{children}</RootLayoutComponent>
       </body>
     </html>
   );

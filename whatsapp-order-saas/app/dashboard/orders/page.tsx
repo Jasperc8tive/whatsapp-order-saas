@@ -1,5 +1,6 @@
 import KanbanBoard from "@/components/KanbanBoard";
 import NewOrderModal from "@/components/NewOrderModal";
+import { OfflineOrdersPanel } from "@/components/OfflineOrdersPanel";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
@@ -183,6 +184,8 @@ export default async function OrdersPage() {
           />
         </div>
       </div>
+
+      <OfflineOrdersPanel />
 
       <KanbanBoard
         initialOrders={orders}
