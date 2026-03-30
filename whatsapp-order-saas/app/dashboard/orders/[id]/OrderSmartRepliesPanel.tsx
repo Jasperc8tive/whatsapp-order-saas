@@ -31,6 +31,9 @@ export default function OrderSmartRepliesPanel({
   const [confidence, setConfidence] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  // Supervisor review state: track approved/rejected for each suggestion
+  const [reviewStatus, setReviewStatus] = useState<Record<number, 'approved' | 'rejected' | undefined>>({});
+  const CONFIDENCE_THRESHOLD = 0.7;
 
   const waLink = customerPhone ? `https://wa.me/${toWaNumber(customerPhone)}` : null;
 
@@ -110,7 +113,56 @@ export default function OrderSmartRepliesPanel({
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
 
-          {suggestions.length > 0 && (
+          {/* Route low-confidence drafts to review */}
+          {confidence !== null && confidence < CONFIDENCE_THRESHOLD ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mt-2">
+              <p className="text-xs text-amber-800 font-semibold">
+                AI suggestions require supervisor review due to low confidence ({Math.round(confidence * 100)}%).
+              </p>
+              <p className="text-xs text-amber-700 mt-1">
+                Please review and approve these drafts before sending to the customer.
+              </p>
+              {suggestions.length > 0 && (
+                <div className="space-y-2 mt-2">
+                  {suggestions.map((reply, index) => (
+                    <div
+                      key={`${orderId}-review-suggestion-${index}`}
+                      className="rounded-lg border border-gray-100 bg-gray-50 p-3"
+                    >
+                      <p className="text-sm text-gray-700">{reply}</p>
+                      <div className="mt-2 flex items-center gap-3">
+                        <button
+                          type="button"
+                          className={`text-xs font-semibold rounded px-2 py-1 ${reviewStatus[index]==='approved' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                          disabled={reviewStatus[index]==='approved'}
+                          onClick={() => setReviewStatus((prev) => ({ ...prev, [index]: 'approved' }))}
+                        >
+                          {reviewStatus[index]==='approved' ? 'Approved' : 'Approve'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`text-xs font-semibold rounded px-2 py-1 ${reviewStatus[index]==='rejected' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                          disabled={reviewStatus[index]==='rejected'}
+                          onClick={() => setReviewStatus((prev) => ({ ...prev, [index]: 'rejected' }))}
+                        >
+                          {reviewStatus[index]==='rejected' ? 'Rejected' : 'Reject'}
+                        </button>
+                      </div>
+                      {reviewStatus[index]==='approved' && (
+                        <div className="mt-2 text-xs text-green-700">This draft is approved for use.</div>
+                      )}
+                      {reviewStatus[index]==='rejected' && (
+                        <div className="mt-2 text-xs text-red-700">This draft has been rejected.</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* Only show suggestions for direct use if confidence is high enough */}
+          {confidence !== null && confidence >= CONFIDENCE_THRESHOLD && suggestions.length > 0 && (
             <div className="space-y-2">
               {suggestions.map((reply, index) => {
                 const quickSendLink = waLink

@@ -153,7 +153,31 @@ async function executeJob(queue: string, payload: Record<string, unknown>): Prom
     return;
   }
 
+  if (queue === "notification_outbound") {
+    await handleNotificationOutbound(payload);
+    return;
+  }
+
   throw new Error(`Unsupported queue: ${queue}`);
+
+// Notification job handler
+import { sendTextMessage } from "@/lib/whatsapp";
+import { NotificationJobPayload } from "@/lib/notificationQueue";
+
+async function handleNotificationOutbound(payload: Record<string, unknown>): Promise<void> {
+  const job = payload as NotificationJobPayload;
+  // WhatsApp only for now; extend for SMS/email/inapp
+  if (job.channel === "whatsapp") {
+    const to = job.recipient;
+    const message = typeof job.template === "string"
+      ? job.template
+      : JSON.stringify(job.template);
+    await sendTextMessage(to, message);
+    return;
+  }
+  // TODO: Add SMS, email, in-app notification support
+  throw new Error(`Unsupported notification channel: ${job.channel}`);
+}
 }
 
 async function notifyStaffDraft(payload: Record<string, unknown>): Promise<void> {

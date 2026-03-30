@@ -23,6 +23,7 @@ interface KanbanColumnProps {
   isAnyDragging: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   updatingIds?: Set<string>;
+  renderCard?: (order: Order) => React.ReactNode;
 }
 
 export default function KanbanColumn({ config, orders, workspaceId, canUseAiSmartReplies = false, isAnyDragging, onStatusChange, updatingIds }: KanbanColumnProps) {
@@ -78,6 +79,8 @@ export default function KanbanColumn({ config, orders, workspaceId, canUseAiSmar
                 "No orders"
               )}
             </div>
+          ) : renderCard ? (
+            orders.map((order) => renderCard(order))
           ) : (
             orders.map((order) => (
               <KanbanCard

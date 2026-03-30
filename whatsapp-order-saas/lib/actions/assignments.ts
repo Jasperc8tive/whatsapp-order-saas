@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { logActivity } from "@/lib/activity";
+import { enqueueNotificationJob } from "@/lib/notificationQueue";
 import type { OrderAssignment } from "@/types/team";
 import type { WorkspaceRole } from "@/types/team";
 
@@ -180,6 +181,23 @@ export async function assignOrder(
     action: "order_assigned",
     meta: { assigned_to: assignedToUserId, reason },
   });
+
+  // ── Manager assignment notification ──
+  // Fetch assignee phone/email for notification
+  const { data: assignee } = await admin
+    .from("users")
+    .select("phone, email, display_name")
+    .eq("id", assignedToUserId)
+    .maybeSingle();
+  if (assignee?.phone) {
+    await enqueueNotificationJob({
+      type: "manager_assignment",
+      recipient: assignee.phone,
+      channel: "whatsapp",
+      template: `You have been assigned a new order (${orderId.slice(0,8).toUpperCase()}). Please check your dashboard.`,
+      data: { orderId, assignedBy: actor.userId, reason },
+    });
+  }
 
   revalidatePath(`/dashboard/orders/${orderId}`);
   revalidatePath("/dashboard/orders");

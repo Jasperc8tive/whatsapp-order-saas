@@ -10,10 +10,24 @@ interface PlanCardProps {
   plan: (typeof PLANS)[PlanId];
   isCurrentPlan: boolean;
   isUpgradable: boolean;
+  isDowngradable: boolean;
+  canDowngrade: boolean;
+  downgradeBlocker?: string;
   upgradesAvailable: boolean;
 }
 
-function PlanCard({ plan, isCurrentPlan, isUpgradable, upgradesAvailable }: PlanCardProps) {
+import { useRef } from "react";
+function PlanCard({ plan, isCurrentPlan, isUpgradable, isDowngradable, canDowngrade, downgradeBlocker, upgradesAvailable }: PlanCardProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+  function handleConfirm(e: React.MouseEvent<HTMLButtonElement>, action: "upgrade" | "downgrade") {
+    e.preventDefault();
+    const msg = action === "upgrade"
+      ? `Are you sure you want to upgrade to the ${plan.name} plan?`
+      : `Are you sure you want to downgrade to the ${plan.name} plan?`;
+    if (window.confirm(msg)) {
+      formRef.current?.submit();
+    }
+  }
   return (
     <div
       className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
@@ -65,33 +79,50 @@ function PlanCard({ plan, isCurrentPlan, isUpgradable, upgradesAvailable }: Plan
         ))}
       </ul>
 
+      {/* Upgrade logic */}
       {!isCurrentPlan && isUpgradable && upgradesAvailable && (
-        <form action="/dashboard/billing/upgrade" method="post" className="mt-auto">
+        <form ref={formRef} action="/dashboard/billing/upgrade" method="post" className="mt-auto">
           <input type="hidden" name="plan" value={plan.id} />
           <button
             className="w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-black transition-colors"
             type="submit"
+            onClick={(e) => handleConfirm(e, "upgrade")}
           >
             Upgrade to {plan.name}
           </button>
         </form>
       )}
 
-      {!isCurrentPlan && isUpgradable && !upgradesAvailable && (
-        <button
-          disabled
-          className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
-          title="Upgrades unavailable until users.plan exists in this deployment"
-        >
-          Upgrade unavailable
-        </button>
+      {/* Downgrade logic */}
+      {!isCurrentPlan && isDowngradable && (
+        canDowngrade ? (
+          <form ref={formRef} action="/dashboard/billing/upgrade" method="post" className="mt-auto">
+            <input type="hidden" name="plan" value={plan.id} />
+            <button
+              className="w-full py-2 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 transition-colors"
+              type="submit"
+              onClick={(e) => handleConfirm(e, "downgrade")}
+            >
+              Downgrade to {plan.name}
+            </button>
+          </form>
+        ) : (
+          <button
+            disabled
+            className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
+            title={downgradeBlocker || "You cannot downgrade due to usage limits."}
+          >
+            Downgrade unavailable
+          </button>
+        )
       )}
 
-      {!isCurrentPlan && !isUpgradable && (
+      {/* Not available for plans above current */}
+      {!isCurrentPlan && !isUpgradable && !isDowngradable && (
         <button
           disabled
           className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
-          title="You can only move to a higher plan"
+          title="You can only move to a higher or lower plan"
         >
           Not available
         </button>
@@ -247,15 +278,32 @@ export default async function BillingPage({
       <div>
         <h2 className="font-semibold text-gray-800 mb-4">Available plans</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {planOrder.map((pid) => (
-            <PlanCard
-              key={pid}
-              plan={PLANS[pid]}
-              isCurrentPlan={pid === currentPlanId}
-              isUpgradable={rank(pid) > rank(currentPlanId)}
-              upgradesAvailable={upgradesAvailable}
-            />
-          ))}
+          {planOrder.map((pid) => {
+            const isCurrent = pid === currentPlanId;
+            const isUp = rank(pid) > rank(currentPlanId);
+            const isDown = rank(pid) < rank(currentPlanId);
+            let canDowngrade = true;
+            let downgradeBlocker = "";
+            if (isDown) {
+              const limit = PLANS[pid].monthlyOrderLimit;
+              if (limit !== null && used > limit) {
+                canDowngrade = false;
+                downgradeBlocker = `You have used ${used} orders this month, which exceeds the ${PLANS[pid].name} plan limit of ${limit}. Wait until next month or reduce usage to downgrade.`;
+              }
+            }
+            return (
+              <PlanCard
+                key={pid}
+                plan={PLANS[pid]}
+                isCurrentPlan={isCurrent}
+                isUpgradable={isUp}
+                isDowngradable={isDown}
+                canDowngrade={canDowngrade}
+                downgradeBlocker={downgradeBlocker}
+                upgradesAvailable={upgradesAvailable}
+              />
+            );
+          })}
         </div>
       </div>
 

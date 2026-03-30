@@ -221,9 +221,29 @@ const sections = [
   },
 ];
 
-export default function OnboardingPage() {
+import dynamic from "next/dynamic";
+import { getCurrentWorkspaceRole } from "@/lib/workspace";
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
+const BillingHealthCheckPanel = dynamic(() => import("@/components/BillingHealthCheckPanel"), { ssr: false });
+
+export default async function OnboardingPage() {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Real workspace owner check
+  const role = await getCurrentWorkspaceRole(user.id);
+  const isWorkspaceOwner = role === "owner";
+
   return (
     <div className="space-y-8 max-w-6xl">
+      {/* Billing health check at top of onboarding, only for owners */}
+      {isWorkspaceOwner && (
+        <div className="mb-4">
+          <BillingHealthCheckPanel />
+        </div>
+      )}
+
       <section className="bg-white border border-gray-200 rounded-xl p-6">
         <h1 className="text-2xl font-bold text-gray-900">WhatsOrder Onboarding</h1>
         <p className="text-sm text-gray-500 mt-2">

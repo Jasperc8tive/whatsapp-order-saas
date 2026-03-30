@@ -246,6 +246,8 @@ export default async function OrderDetailPage({ params }: Props) {
         currentAssigneeId={currentAssignment?.assigned_to ?? null}
         members={assignableMembers}
       />
+      {/* Assignment History Timeline */}
+      <OrderAssignmentHistoryPanel orderId={order.id} vendorId={order.vendor_id} />
     </div>
   );
 }
