@@ -4,6 +4,9 @@ import AddCustomerModal from "@/components/AddCustomerModal";
 import DownloadCustomersButton from "@/components/DownloadCustomersButton";
 import { OfflineCustomersPanel } from "@/components/OfflineCustomersPanel";
 import EditCustomerModal from "@/components/EditCustomerModal";
+import DeleteCustomerButton from "@/components/DeleteCustomerButton";
+import ImportCustomersButton from "@/components/ImportCustomersButton";
+import CustomersTable from "@/components/CustomersTable";
 
 // Matches the columns that exist in the Supabase customers table
 interface CustomerRow {
@@ -30,6 +33,10 @@ export default async function CustomersPage() {
 
   const rows: CustomerRow[] = customers ?? [];
 
+  // --- Bulk selection state (client only) ---
+  // This is a scaffold: actual state/logic should be in a client component
+  // For now, just show the import button in the header
+
   return (
     <div>
       {/* Header */}
@@ -45,6 +52,7 @@ export default async function CustomersPage() {
         <div className="flex gap-2 mt-4">
           <AddCustomerModal vendorId={user.id} />
           <DownloadCustomersButton customers={rows} />
+          <ImportCustomersButton vendorId={user.id} onDone={() => {}} />
         </div>
       </div>
       <div className="mt-6">
@@ -60,27 +68,7 @@ export default async function CustomersPage() {
             <p className="text-xs text-gray-400 mt-1">Click &ldquo;+ Add Customer&rdquo; to add your first one.</p>
           </div>
         ) : (
-          <table className="min-w-full bg-white rounded-xl border border-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Name</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Phone</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Added</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((customer) => (
-                <tr key={customer.id}>
-                  <td className="px-4 py-2 text-sm text-gray-800 flex items-center">
-                    {customer.name}
-                    <EditCustomerModal customer={customer} />
-                  </td>
-                  <td className="px-4 py-2 text-sm text-gray-800">{customer.phone}</td>
-                  <td className="px-4 py-2 text-sm text-gray-500">{new Date(customer.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <CustomersTable customers={rows} />
         )}
       </div>
       <OfflineCustomersPanel />

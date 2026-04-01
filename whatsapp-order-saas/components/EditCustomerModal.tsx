@@ -4,6 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+// Nigeria phone number validation utility
+function isValidNigerianPhone(phone: string): boolean {
+  // Accepts: 080xxxxxxxx, 070xxxxxxxx, 081xxxxxxxx, 090xxxxxxxx, 091xxxxxxxx, or +2348xxxxxxxx, +2347xxxxxxxx, +2349xxxxxxxx, +2341xxxxxxxx
+  // Must be 11 digits (local) or 14 (+234xxxxxxxxxx)
+  const local = /^(080|070|081|090|091)\d{8}$/;
+  const intl = /^\+234(80|70|81|90|91)\d{8}$/;
+  return local.test(phone) || intl.test(phone);
+}
+
 export default function EditCustomerModal({ customer, onDone }: { customer: { id: string; name: string; phone: string; }, onDone?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -34,6 +43,10 @@ export default function EditCustomerModal({ customer, onDone }: { customer: { id
     }
     if (!form.phone.trim()) {
       setError("Phone number is required.");
+      return;
+    }
+    if (!isValidNigerianPhone(form.phone.trim())) {
+      setError("Enter a valid Nigerian phone number (e.g. 08012345678 or +2348012345678)");
       return;
     }
     setLoading(true);
