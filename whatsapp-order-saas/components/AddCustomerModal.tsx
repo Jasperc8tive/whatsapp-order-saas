@@ -88,10 +88,10 @@ export default function AddCustomerModal({ vendorId }: { vendorId: string }) {
       {/* Modal backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-2 sm:px-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-6">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-5">

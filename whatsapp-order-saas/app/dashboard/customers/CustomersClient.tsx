@@ -16,7 +16,7 @@ export default function CustomersClient({ customers, vendorId }: CustomersClient
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Customers</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -25,15 +25,15 @@ export default function CustomersClient({ customers, vendorId }: CustomersClient
               : `${customers.length} customer${customers.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <div className="flex gap-2 mt-4">
+        <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full sm:w-auto">
           <AddCustomerModal vendorId={vendorId} />
           <DownloadCustomersButton customers={customers} />
           <ImportCustomersButton vendorId={vendorId} onDone={() => {}} />
         </div>
       </div>
-      <div className="mt-6">
+      <div className="mt-6 w-full">
         {customers.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 px-6 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-12 px-3 sm:px-6 text-center w-full">
             <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-4">
               <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
