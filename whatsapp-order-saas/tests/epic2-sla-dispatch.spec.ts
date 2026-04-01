@@ -12,6 +12,7 @@ test.describe('Epic 2 — SLA & Dispatch Intelligence', () => {
     for (const card of cards) {
       const badge = await card.$('[title*="SLA"]');
       expect(badge).not.toBeNull();
+      if (!badge) continue; // TypeScript: ensure badge is not null
       // Check color class
       const badgeClass = await badge.getAttribute('class');
       expect(
