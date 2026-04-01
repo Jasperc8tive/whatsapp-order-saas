@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 
+
 export default function BillingHealthCheckPanel() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [fixing, setFixing] = useState(false);
+  const [fixError, setFixError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/billing-health")
@@ -14,13 +17,6 @@ export default function BillingHealthCheckPanel() {
       });
   }, []);
 
-  if (loading) return <div className="text-sm">Checking billing schema…</div>;
-  if (!result) return <div className="text-red-600 text-sm">Could not check billing schema.</div>;
-  if (result.ok) return <div className="text-green-700 text-sm">Billing schema is healthy.</div>;
-
-  // Fix Now button logic
-  const [fixing, setFixing] = useState(false);
-  const [fixError, setFixError] = useState<string | null>(null);
   async function handleFix() {
     setFixing(true);
     setFixError(null);
@@ -42,6 +38,10 @@ export default function BillingHealthCheckPanel() {
       setFixing(false);
     }
   }
+
+  if (loading) return <div className="text-sm">Checking billing schema…</div>;
+  if (!result) return <div className="text-red-600 text-sm">Could not check billing schema.</div>;
+  if (result.ok) return <div className="text-green-700 text-sm">Billing schema is healthy.</div>;
 
   return (
     <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 text-sm">

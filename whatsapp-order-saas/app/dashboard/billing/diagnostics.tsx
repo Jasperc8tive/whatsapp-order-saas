@@ -1,3 +1,4 @@
+"use client";
 import BillingHealthCheckPanel from "@/components/BillingHealthCheckPanel";
 import dynamic from "next/dynamic";
 const BillingDiagnosticsPanels = dynamic(() => import("@/components/BillingDiagnosticsPanels"), { ssr: false });

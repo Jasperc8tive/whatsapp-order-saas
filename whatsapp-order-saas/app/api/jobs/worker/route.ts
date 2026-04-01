@@ -4,6 +4,7 @@ import { processInboundMessage } from "@/lib/actions/inbound";
 import { runAutomationForEvent } from "@/lib/automation";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { sendTextMessage } from "@/lib/whatsapp";
+import { NotificationJobPayload } from "@/lib/notificationQueue";
 
 export const dynamic = "force-dynamic";
 
@@ -160,12 +161,26 @@ async function executeJob(queue: string, payload: Record<string, unknown>): Prom
 
   throw new Error(`Unsupported queue: ${queue}`);
 
-// Notification job handler
-import { sendTextMessage } from "@/lib/whatsapp";
-import { NotificationJobPayload } from "@/lib/notificationQueue";
 
 async function handleNotificationOutbound(payload: Record<string, unknown>): Promise<void> {
-  const job = payload as NotificationJobPayload;
+  // Type guard for NotificationJobPayload
+  function isNotificationJobPayload(obj: any): obj is NotificationJobPayload {
+    return (
+      typeof obj === "object" &&
+      obj !== null &&
+      typeof obj.type === "string" &&
+      typeof obj.recipient === "string" &&
+      typeof obj.channel === "string" &&
+      (obj.channel === "whatsapp" || obj.channel === "sms" || obj.channel === "email" || obj.channel === "inapp") &&
+      typeof obj.template === "string" &&
+      typeof obj.data === "object"
+    );
+  }
+
+  if (!isNotificationJobPayload(payload)) {
+    throw new Error("Invalid notification job payload");
+  }
+  const job = payload;
   // WhatsApp only for now; extend for SMS/email/inapp
   if (job.channel === "whatsapp") {
     const to = job.recipient;

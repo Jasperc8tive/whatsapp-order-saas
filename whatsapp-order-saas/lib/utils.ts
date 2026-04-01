@@ -16,39 +16,6 @@ export const offlineDB = {
         if (!db.objectStoreNames.contains('products')) {
           db.createObjectStore('products', { keyPath: 'id' });
         }
-        async saveProduct(product: any) {
-          const db = await this.open();
-          return new Promise((resolve, reject) => {
-            const tx = db.transaction('products', 'readwrite');
-            tx.objectStore('products').put(product);
-            tx.oncomplete = () => {
-              window.dispatchEvent(new Event('offline-product-changed'));
-              resolve(undefined);
-            };
-            tx.onerror = () => reject(tx.error);
-          });
-        },
-        async getProducts() {
-          const db = await this.open();
-          return new Promise<any[]>((resolve, reject) => {
-            const tx = db.transaction('products', 'readonly');
-            const req = tx.objectStore('products').getAll();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-          });
-        },
-        async clearProducts() {
-          const db = await this.open();
-          return new Promise((resolve, reject) => {
-            const tx = db.transaction('products', 'readwrite');
-            tx.objectStore('products').clear();
-            tx.oncomplete = () => {
-              window.dispatchEvent(new Event('offline-product-changed'));
-              resolve(undefined);
-            };
-            tx.onerror = () => reject(tx.error);
-          });
-        },
       };
       request.onsuccess = () => {
         this.db = request.result;
@@ -90,6 +57,39 @@ export const offlineDB = {
         tx.onerror = () => reject(tx.error);
       });
     },
+  async saveProduct(product: any) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('products', 'readwrite');
+      tx.objectStore('products').put(product);
+      tx.oncomplete = () => {
+        window.dispatchEvent(new Event('offline-product-changed'));
+        resolve(undefined);
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async getProducts() {
+    const db = await this.open();
+    return new Promise<any[]>((resolve, reject) => {
+      const tx = db.transaction('products', 'readonly');
+      const req = tx.objectStore('products').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async clearProducts() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('products', 'readwrite');
+      tx.objectStore('products').clear();
+      tx.oncomplete = () => {
+        window.dispatchEvent(new Event('offline-product-changed'));
+        resolve(undefined);
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  },
   async saveOrder(order: any) {
     const db = await this.open();
     return new Promise((resolve, reject) => {

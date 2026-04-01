@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
-import { OfflineIndicator } from "@/components/OfflineIndicator";
-import { useSyncOfflineOrders } from "@/lib/useSyncOfflineOrders";
+import ClientSyncProvider from "@/components/ClientSyncProvider";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -21,16 +20,7 @@ export const metadata: Metadata = {
   description: "Manage WhatsApp orders for your business",
 };
 
-function RootLayoutComponent({ children }: { children: React.ReactNode }) {
-  useSyncOfflineOrders();
-  return (
-    <>
-      <OfflineIndicator />
-      {children}
-      <SpeedInsights />
-    </>
-  );
-}
+
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -48,7 +38,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         }} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <RootLayoutComponent>{children}</RootLayoutComponent>
+        <ClientSyncProvider />
+        {children}
+        <SpeedInsights />
       </body>
     </html>
   );

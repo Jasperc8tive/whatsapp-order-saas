@@ -221,10 +221,9 @@ const sections = [
   },
 ];
 
-import dynamic from "next/dynamic";
 import { getCurrentWorkspaceRole } from "@/lib/workspace";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
-const BillingHealthCheckPanel = dynamic(() => import("@/components/BillingHealthCheckPanel"), { ssr: false });
+import BillingHealthCheckClientEntry from "@/components/BillingHealthCheckClientEntry";
 
 export default async function OnboardingPage() {
   const supabase = await createServerSupabaseClient();
@@ -240,7 +239,7 @@ export default async function OnboardingPage() {
       {/* Billing health check at top of onboarding, only for owners */}
       {isWorkspaceOwner && (
         <div className="mb-4">
-          <BillingHealthCheckPanel />
+          <BillingHealthCheckClientEntry />
         </div>
       )}
 

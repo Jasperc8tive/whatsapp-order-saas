@@ -1,18 +1,14 @@
-@@ -3,121 +3,142 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
+
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import OrderAssignmentBoard from "@/components/OrderAssignmentBoard";
 
-export const metadata = { title: "Delivery Queue" };
-
-export default async function DeliveryQueuePage() {
+export default async function DeliveryPage({ params, searchParams }: any) {
+  // You may need to get user/session context here
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
   const admin = createAdminClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
 
   // Get vendor/workspace - check if user is owner
   const { data: vendor } = await supabase
@@ -21,28 +17,19 @@ export default async function DeliveryQueuePage() {
     .eq("id", user.id)
     .single();
 
-  if (!vendor) redirect("/login");
+  if (!vendor) return null;
 
   // Get unassigned and assigned orders for this vendor
-  const { data: orders = [] } = await admin
   const { data: ordersData } = await admin
     .from("orders")
     .select(
-      `
-      id,
-      customer_id,
-      customers(name, phone),
-      total_amount,
-      order_status,
-      created_at
-    `
+      `id, customer_id, customers(name, phone), total_amount, order_status, created_at`
     )
     .eq("vendor_id", vendor.id)
     .in("order_status", ["pending", "confirmed", "processing"])
     .order("created_at", { ascending: false });
 
   // Get delivery managers/staff for this workspace
-  const { data: deliveryManagers = [] } = await admin
   const { data: deliveryManagersData } = await admin
     .from("workspace_members")
     .select("id, user_id, role, display_name")
@@ -54,12 +41,8 @@ export default async function DeliveryQueuePage() {
   const deliveryManagers = deliveryManagersData ?? [];
 
   // Get order assignments
-  const { data: assignments = [] } = await admin
-    .from("order_assignments")
-    .select("order_id, assigned_to, assigned_by");
-  const orderIds = orders.map((order) => order.id);
-
   // Only fetch assignments for visible orders to avoid cross-workspace reads
+  const orderIds = orders.map((order: any) => order.id);
   const { data: assignmentsData } = orderIds.length
     ? await admin
         .from("order_assignments")
@@ -70,29 +53,18 @@ export default async function DeliveryQueuePage() {
   const assignments = assignmentsData ?? [];
 
   // Create assignment map for quick lookup
-  const assignmentMap = new Map(
-    (assignments || []).map((a: any) => [a.order_id, a])
-  );
-  const assignmentMap = new Map(assignments.map((a) => [a.order_id, a]));
+  const assignmentMap = new Map(assignments.map((a: any) => [a.order_id, a]));
 
   // Get user details for assigned managers
-  const userCache = new Map<string, any>();
-  for (const manager of deliveryManagers || []) {
-    if (!userCache.has(manager.user_id)) {
   const userCache = new Map<string, {
     user_metadata?: { display_name?: string; name?: string };
     email?: string;
   }>();
 
   await Promise.all(
-    deliveryManagers.map(async (manager) => {
+    deliveryManagers.map(async (manager: any) => {
       if (userCache.has(manager.user_id)) return;
-
       try {
-        const { data } = await admin.auth.admin.getUserById(
-          manager.user_id
-        );
-        userCache.set(manager.user_id, data);
         const { data } = await admin.auth.admin.getUserById(manager.user_id);
         if (data?.user) {
           userCache.set(manager.user_id, {
@@ -106,13 +78,10 @@ export default async function DeliveryQueuePage() {
       } catch {
         // Continue
       }
-    }
-  }
     })
   );
 
   // Format orders with assignment data
-  const formattedOrders = (orders || []).map((order: any) => {
   const formattedOrders = orders.map((order: any) => {
     const assignment = assignmentMap.get(order.id);
     return {
@@ -133,7 +102,6 @@ export default async function DeliveryQueuePage() {
   });
 
   // Format delivery managers
-  const formattedManagers = (deliveryManagers || []).map((manager: any) => {
   const formattedManagers = deliveryManagers.map((manager: any) => {
     const userData = userCache.get(manager.user_id);
     return {
@@ -160,3 +128,5 @@ export default async function DeliveryQueuePage() {
         />
       </div>
     </div>
+  );
+}

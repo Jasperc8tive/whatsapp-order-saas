@@ -1,3 +1,5 @@
+
+"use client";
 import { useOfflineCustomers } from "@/lib/useOfflineCustomers";
 import { offlineDB } from "@/lib/utils";
 import { useState } from "react";

@@ -47,9 +47,8 @@ function StatCard({ label, value, sub, positive, icon, accent }: StatCardProps) 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-import dynamic from "next/dynamic";
 import { getCurrentWorkspaceRole } from "@/lib/workspace";
-const BillingHealthCheckPanel = dynamic(() => import("@/components/BillingHealthCheckPanel"), { ssr: false });
+import BillingHealthCheckClientEntry from "@/components/BillingHealthCheckClientEntry";
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient();
@@ -135,7 +134,7 @@ export default async function DashboardPage() {
       {/* Billing health check for workspace owners */}
       {isWorkspaceOwner && (
         <div className="mb-4">
-          <BillingHealthCheckPanel />
+          <BillingHealthCheckClientEntry />
           <Link href="/dashboard/billing/diagnostics" className="block mt-2 text-xs text-blue-700 underline font-semibold">
             Go to Billing Diagnostics →
           </Link>

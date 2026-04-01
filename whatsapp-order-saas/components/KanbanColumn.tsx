@@ -26,7 +26,7 @@ interface KanbanColumnProps {
   renderCard?: (order: Order) => React.ReactNode;
 }
 
-export default function KanbanColumn({ config, orders, workspaceId, canUseAiSmartReplies = false, isAnyDragging, onStatusChange, updatingIds }: KanbanColumnProps) {
+export default function KanbanColumn({ config, orders, workspaceId, canUseAiSmartReplies = false, isAnyDragging, onStatusChange, updatingIds, renderCard }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: config.id });
   const [cardsParentRef] = useAutoAnimate<HTMLDivElement>({
     duration: 220,

@@ -70,6 +70,7 @@ interface KanbanCardProps {
   assignment?: OrderAssignment | null;
 }
 
+export default function KanbanCard({
   order,
   workspaceId,
   canUseAiSmartReplies = false,

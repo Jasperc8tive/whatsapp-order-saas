@@ -3,18 +3,24 @@ import { autoAssignOrders } from "@/lib/autoAssignEngine";
 import type { Order } from "@/types/order";
 import type { WorkspaceMember } from "@/types/team";
 
-export default function BulkAssignButton({ orders, managers, onPreview }: {
+interface BulkAssignButtonProps {
   orders: Order[];
   managers: WorkspaceMember[];
-  onPreview: (results: ReturnType<typeof autoAssignOrders>) => void;
-}) {
+  vendorId: string;
+  onPreview: (results: Awaited<ReturnType<typeof autoAssignOrders>>) => void;
+}
+
+export default function BulkAssignButton({ orders, managers, vendorId, onPreview }: BulkAssignButtonProps) {
   const [loading, setLoading] = useState(false);
 
-  function handleBulkAssign() {
+  async function handleBulkAssign() {
     setLoading(true);
-    const results = autoAssignOrders(orders, managers);
-    setLoading(false);
-    onPreview(results);
+    try {
+      const results = await autoAssignOrders(orders, managers, vendorId);
+      onPreview(results);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

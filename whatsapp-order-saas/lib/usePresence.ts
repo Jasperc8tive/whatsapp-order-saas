@@ -31,10 +31,11 @@ export function usePresence(workspaceId: string) {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
+          const { data } = await supabase.auth.getUser();
           channel.track({
-            user_id: supabase.auth.getUser().data.user?.id,
-            display_name: supabase.auth.getUser().data.user?.user_metadata?.display_name ?? null,
-            email: supabase.auth.getUser().data.user?.email ?? "",
+            user_id: data.user?.id,
+            display_name: data.user?.user_metadata?.display_name ?? null,
+            email: data.user?.email ?? "",
             role: "delivery_manager",
             online_at: new Date().toISOString(),
           });
