@@ -15,12 +15,14 @@ test.describe('Epic 2 — SLA & Dispatch Intelligence', () => {
       // Check color class
       const badgeClass = await badge.getAttribute('class');
       expect(
-        badgeClass.includes('bg-green-100') ||
-        badgeClass.includes('bg-amber-100') ||
-        badgeClass.includes('bg-red-100')
+        badgeClass && (
+          badgeClass.includes('bg-green-100') ||
+          badgeClass.includes('bg-amber-100') ||
+          badgeClass.includes('bg-red-100')
+        )
       ).toBeTruthy();
       // If breached, should have warning icon
-      if (badgeClass.includes('bg-red-100')) {
+      if (badgeClass && badgeClass.includes('bg-red-100')) {
         const warningIcon = await badge.$('svg.text-red-500');
         expect(warningIcon).not.toBeNull();
       }
