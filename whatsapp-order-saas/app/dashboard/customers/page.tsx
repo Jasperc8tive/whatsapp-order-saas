@@ -5,7 +5,6 @@ import DownloadCustomersButton from "@/components/DownloadCustomersButton";
 import { OfflineCustomersPanel } from "@/components/OfflineCustomersPanel";
 import EditCustomerModal from "@/components/EditCustomerModal";
 import DeleteCustomerButton from "@/components/DeleteCustomerButton";
-import BulkActionsBar from "@/components/BulkActionsBar";
 import ImportCustomersButton from "@/components/ImportCustomersButton";
 import CustomersTable from "@/components/CustomersTable";
 
@@ -69,10 +68,7 @@ export default async function CustomersPage() {
             <p className="text-xs text-gray-400 mt-1">Click &ldquo;+ Add Customer&rdquo; to add your first one.</p>
           </div>
         ) : (
-          <>
-            <BulkActionsBar selectedIds={[]} onClear={clearSelection} customers={rows} />
-            <CustomersTable customers={rows} />
-          </>
+          <CustomersTable customers={rows} />
         )}
       </div>
       <OfflineCustomersPanel />

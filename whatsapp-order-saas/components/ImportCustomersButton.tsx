@@ -15,6 +15,7 @@ export default function ImportCustomersButton({ vendorId, onDone }: ImportCustom
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
     if (!file) return;
     const text = await file.text();
