@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import AddCustomerModal from "@/components/AddCustomerModal";
 import DownloadCustomersButton from "@/components/DownloadCustomersButton";
 import { OfflineCustomersPanel } from "@/components/OfflineCustomersPanel";
+import EditCustomerModal from "@/components/EditCustomerModal";
 
 // Matches the columns that exist in the Supabase customers table
 interface CustomerRow {
@@ -70,7 +71,10 @@ export default async function CustomersPage() {
             <tbody>
               {rows.map((customer) => (
                 <tr key={customer.id}>
-                  <td className="px-4 py-2 text-sm text-gray-800">{customer.name}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800 flex items-center">
+                    {customer.name}
+                    <EditCustomerModal customer={customer} />
+                  </td>
                   <td className="px-4 py-2 text-sm text-gray-800">{customer.phone}</td>
                   <td className="px-4 py-2 text-sm text-gray-500">{new Date(customer.created_at).toLocaleDateString()}</td>
                 </tr>
@@ -82,6 +86,5 @@ export default async function CustomersPage() {
       <OfflineCustomersPanel />
     </div>
   );
-// Removed stray/duplicate table row code after main return
 }
 
