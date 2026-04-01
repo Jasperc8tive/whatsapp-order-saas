@@ -1,5 +1,6 @@
 "use client";
 
+import { CustomerRow } from "@/components/BulkActionsBar";
 import { useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -10,10 +11,10 @@ function isValidNigerianPhone(phone: string): boolean {
   return local.test(phone) || intl.test(phone);
 }
 
-export default function ImportCustomersButton({ vendorId, onDone }) {
-  const fileInput = useRef(null);
+export default function ImportCustomersButton({ vendorId, onDone }: ImportCustomersButtonProps) {
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  async function handleFile(e) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files[0];
     if (!file) return;
     const text = await file.text();
@@ -49,4 +50,9 @@ export default function ImportCustomersButton({ vendorId, onDone }) {
       />
     </>
   );
+}
+
+interface ImportCustomersButtonProps {
+  vendorId: string;
+  onDone: () => void;
 }

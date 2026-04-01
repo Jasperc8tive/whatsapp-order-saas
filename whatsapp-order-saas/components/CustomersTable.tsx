@@ -4,11 +4,16 @@ import { useState } from "react";
 import BulkActionsBar from "@/components/BulkActionsBar";
 import EditCustomerModal from "@/components/EditCustomerModal";
 import DeleteCustomerButton from "@/components/DeleteCustomerButton";
+import { CustomerRow } from "@/components/BulkActionsBar";
 
-export default function CustomersTable({ customers }) {
-  const [selected, setSelected] = useState([]);
+interface CustomersTableProps {
+  customers: CustomerRow[];
+}
 
-  function toggle(id) {
+export default function CustomersTable({ customers }: CustomersTableProps) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  function toggle(id: string) {
     setSelected((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
   function toggleAll() {

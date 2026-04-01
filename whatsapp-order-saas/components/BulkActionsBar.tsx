@@ -3,7 +3,22 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function BulkActionsBar({ selectedIds, onClear, customers }) {
+
+// --- Types ---
+export interface CustomerRow {
+  id: string;
+  name: string;
+  phone: string;
+  created_at: string;
+}
+
+interface BulkActionsBarProps {
+  selectedIds: string[];
+  onClear: () => void;
+  customers: CustomerRow[];
+}
+
+export default function BulkActionsBar({ selectedIds, onClear, customers }: BulkActionsBarProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,10 +37,10 @@ export default function BulkActionsBar({ selectedIds, onClear, customers }) {
   }
 
   function handleBulkExport() {
-    const exportRows = customers.filter(c => selectedIds.includes(c.id));
+    const exportRows = customers.filter((c: CustomerRow) => selectedIds.includes(c.id));
     const csv = [
       ["Name", "Phone", "Added"],
-      ...exportRows.map(c => [c.name, c.phone, c.created_at])
+      ...exportRows.map((c: CustomerRow) => [c.name, c.phone, c.created_at])
     ].map(row => row.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
