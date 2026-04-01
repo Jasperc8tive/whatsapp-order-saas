@@ -75,10 +75,10 @@ export default function EditCustomerModal({ customer, onDone }: { customer: { id
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-2 sm:px-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold text-gray-800">Edit Customer</h2>
               <button
