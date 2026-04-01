@@ -1,5 +1,9 @@
 import KanbanBoard from "@/components/KanbanBoard";
+import AssignmentMetricsPanel from "@/components/AssignmentMetricsPanel";
+import NotificationQueueMonitor from "@/components/NotificationQueueMonitor";
+import { PresenceBar } from "@/components/PresenceBar";
 import NewOrderModal from "@/components/NewOrderModal";
+import { OfflineOrdersPanel } from "@/components/OfflineOrdersPanel";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
@@ -184,11 +188,20 @@ export default async function OrdersPage() {
         </div>
       </div>
 
+      <OfflineOrdersPanel />
+
+      <PresenceBar workspaceId={user?.id ?? ""} />
       <KanbanBoard
         initialOrders={orders}
         vendorId={user?.id ?? ""}
         canUseAiSmartReplies={canUseAiSmartReplies}
       />
+
+      {/* Supervisor Assignment Metrics */}
+      {user?.id && <AssignmentMetricsPanel vendorId={user.id} />}
+
+      {/* Notification Queue Monitor */}
+      <NotificationQueueMonitor />
     </div>
   );
 }

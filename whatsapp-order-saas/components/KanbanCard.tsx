@@ -13,6 +13,29 @@ import {
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
 } from "@/lib/utils";
+
+// SLA badge color thresholds (in minutes)
+const SLA_THRESHOLDS = {
+  green: 15,   // < 15 min
+  amber: 30,   // < 30 min
+  red: 30      // >= 30 min
+};
+
+function getSlaBadgeColor(minutes: number) {
+  if (minutes < SLA_THRESHOLDS.green) return "bg-green-100 text-green-700 border-green-300";
+  if (minutes < SLA_THRESHOLDS.amber) return "bg-amber-100 text-amber-700 border-amber-300";
+  return "bg-red-100 text-red-700 border-red-300 animate-pulse";
+}
+
+function getSlaLabel(minutes: number) {
+  if (minutes < SLA_THRESHOLDS.green) return "On track";
+  if (minutes < SLA_THRESHOLDS.amber) return "Approaching SLA";
+  return "SLA Breached";
+}
+
+function isSlaBreached(minutes: number) {
+  return minutes >= SLA_THRESHOLDS.red;
+}
 import { getOrderAssignment } from "@/lib/actions/assignments";
 import AssignmentBadge from "./AssignmentBadge";
 import AssignmentModal from "./AssignmentModal";
@@ -44,6 +67,7 @@ interface KanbanCardProps {
   overlay?: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   isPending?: boolean;
+  assignment?: OrderAssignment | null;
 }
 
 export default function KanbanCard({
@@ -53,14 +77,13 @@ export default function KanbanCard({
   overlay = false,
   onStatusChange,
   isPending = false,
+  assignment = null,
 }: KanbanCardProps) {
   const [localPending, startTransition] = useTransition();
   const isUpdating = isPending || localPending;
-
-  // Assignment state
-  const [assignment, setAssignment] = useState<OrderAssignment | null>(null);
-  const [isLoadingAssignment, setIsLoadingAssignment] = useState(true);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  // No internal assignment state; rely on prop
+  const isLoadingAssignment = false;
 
   // Smart reply state
   const [isGeneratingReplies, startGeneratingReplies] = useTransition();
@@ -70,20 +93,7 @@ export default function KanbanCard({
   const [replyError, setReplyError] = useState<string | null>(null);
   const [copiedReplyIndex, setCopiedReplyIndex] = useState<number | null>(null);
 
-  // Load assignment on mount
-  useEffect(() => {
-    async function loadAssignment() {
-      try {
-        const result = await getOrderAssignment(order.id);
-        setAssignment(result.assignment ?? null);
-      } catch (err) {
-        console.error("Failed to load assignment:", err);
-      } finally {
-        setIsLoadingAssignment(false);
-      }
-    }
-    loadAssignment();
-  }, [order.id]);
+
 
   function handleStatusSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const newStatus = e.target.value as OrderStatus;
@@ -146,6 +156,14 @@ export default function KanbanCard({
     }
   }
 
+
+  // SLA badge calculation
+  const createdAt = new Date(order.created_at);
+  const now = new Date();
+  const ageMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+  const slaColor = getSlaBadgeColor(ageMinutes);
+  const slaLabel = getSlaLabel(ageMinutes);
+
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
@@ -160,7 +178,7 @@ export default function KanbanCard({
         .filter(Boolean)
         .join(" ")}
     >
-      {/* Header: drag grip + customer name + status badge */}
+      {/* Header: drag grip + customer name + status badge + SLA badge */}
       <div className="flex items-start gap-2 mb-3">
         {/* Drag grip — only this element triggers drag, so tapping elsewhere works normally */}
         <div
@@ -180,6 +198,23 @@ export default function KanbanCard({
           <p className="font-semibold text-gray-800 text-sm leading-tight truncate">
             {order.customer_name}
           </p>
+        </div>
+
+
+        {/* SLA badge (always shown) */}
+        <div
+          className={["flex flex-col items-end ml-2 min-w-[70px] relative", slaColor, "border px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors duration-300"].join(" ")}
+          title={slaLabel}
+        >
+          <span>{formatRelativeTime(order.created_at)}</span>
+          <span className="font-normal flex items-center gap-1">
+            {slaLabel}
+            {isSlaBreached(ageMinutes) && (
+              <svg className="w-3.5 h-3.5 text-red-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            )}
+          </span>
         </div>
 
         {/* Status selector — click to change without dragging */}
@@ -411,12 +446,6 @@ export default function KanbanCard({
           workspaceId={workspaceId}
           currentAssignment={assignment}
           onClose={() => setShowAssignmentModal(false)}
-          onAssigned={() => {
-            // Refresh assignment data after assignment is changed
-            getOrderAssignment(order.id).then((result) => {
-              setAssignment(result.assignment ?? null);
-            });
-          }}
         />
       )}
     </div>

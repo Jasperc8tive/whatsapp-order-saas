@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import ProductsClient from "./ProductsClient";
+import { OfflineProductsPanel } from "@/components/OfflineProductsPanel";
 
 export default async function ProductsPage({
   searchParams,
@@ -57,9 +58,12 @@ export default async function ProductsPage({
   }));
 
   return (
-    <ProductsClient
-      initialProducts={normalizedProducts}
-      highlightProductId={resolvedSearchParams?.highlight}
-    />
+    <>
+      <OfflineProductsPanel />
+      <ProductsClient
+        initialProducts={normalizedProducts}
+        highlightProductId={resolvedSearchParams?.highlight}
+      />
+    </>
   );
 }

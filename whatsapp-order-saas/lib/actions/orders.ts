@@ -13,6 +13,7 @@ import {
 } from "@/lib/plans";
 import type { OrderStatus } from "@/types/order";
 import { notifyOrderCreated, notifyOrderShipped } from "@/lib/whatsapp";
+import { enqueueNotificationJob } from "@/lib/notificationQueue";
 import { logActivity } from "@/lib/activity";
 import { enqueueJob } from "@/lib/jobs";
 import { parseOrderFromMessage, type CatalogItem } from "@/lib/ai-parse";
@@ -1045,37 +1046,39 @@ export async function updateOrderStatus(
     meta: { new_status: newStatus },
   });
 
-  //  WhatsApp notification on "shipped" 
-  if (newStatus === "shipped") {
+  //  WhatsApp notification on "shipped" or "delivered" (customer status alerts)
+  if (newStatus === "shipped" || newStatus === "delivered") {
     const adminClient = createAdminClient();
-
     const { data: shippedOrderRow } = await adminClient
       .from("orders")
       .select(`id, customers ( name, phone ), deliveries ( courier, tracking_id, delivery_status )`)
       .eq("id", orderId)
       .single();
-
     const customer   = (shippedOrderRow?.customers  as unknown) as { name: string; phone: string } | null;
     const deliveries = (shippedOrderRow?.deliveries as unknown) as Array<{
       courier: string | null; tracking_id: string | null; delivery_status: string;
     }> | null;
     const delivery = deliveries?.find((d) => d.delivery_status !== "returned") ?? deliveries?.[0];
-
     const { data: vendorRow } = await adminClient
       .from("users")
       .select("business_name")
       .eq("id", workspaceId)
       .single();
-
     if (customer?.phone) {
-      void notifyOrderShipped({
-        customerName:  customer.name,
-        customerPhone: customer.phone,
-        orderId,
-        orderRef:      orderId.slice(0, 8).toUpperCase(),
-        vendorName:    vendorRow?.business_name ?? "the vendor",
-        courier:       delivery?.courier    ?? null,
-        trackingId:    delivery?.tracking_id ?? null,
+      let template = "";
+      if (newStatus === "shipped") {
+        template = `Hello ${customer.name}! Your order #${orderId.slice(0,8).toUpperCase()} is out for delivery from ${vendorRow?.business_name ?? "the vendor"}.`;
+        if (delivery?.courier) template += `\nCourier: ${delivery.courier}`;
+        if (delivery?.tracking_id) template += `\nTracking ID: ${delivery.tracking_id}`;
+      } else if (newStatus === "delivered") {
+        template = `Hello ${customer.name}! Your order #${orderId.slice(0,8).toUpperCase()} has been delivered. Thank you for choosing ${vendorRow?.business_name ?? "us"}!`;
+      }
+      await enqueueNotificationJob({
+        type: "customer_status",
+        recipient: customer.phone,
+        channel: "whatsapp",
+        template,
+        data: { orderId, status: newStatus, vendor: vendorRow?.business_name ?? null },
       });
     }
   }

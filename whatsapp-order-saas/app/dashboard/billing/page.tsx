@@ -3,102 +3,11 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { PLANS, DEFAULT_PLAN, getMonthOrderCount, resolvePlanId, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/utils";
+import dynamic from "next/dynamic";
 
 // ── Plan card ──────────────────────────────────────────────────────────────────
 
-interface PlanCardProps {
-  plan: (typeof PLANS)[PlanId];
-  isCurrentPlan: boolean;
-  isUpgradable: boolean;
-  upgradesAvailable: boolean;
-}
-
-function PlanCard({ plan, isCurrentPlan, isUpgradable, upgradesAvailable }: PlanCardProps) {
-  return (
-    <div
-      className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
-        isCurrentPlan
-          ? "border-green-500 bg-green-50 ring-2 ring-green-500/20"
-          : "border-gray-200 bg-white"
-      }`}
-    >
-      {isCurrentPlan && (
-        <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-          Current plan
-        </span>
-      )}
-
-      <div>
-        <p className="text-lg font-bold text-gray-900">{plan.name}</p>
-        <p className="text-sm text-gray-500 mt-0.5">{plan.description}</p>
-      </div>
-
-      <div>
-        {plan.price === 0 ? (
-          <p className="text-2xl font-extrabold text-gray-900">Free</p>
-        ) : (
-          <p className="text-2xl font-extrabold text-gray-900">
-            {formatCurrency(plan.price)}
-            <span className="text-sm font-normal text-gray-500"> / month</span>
-          </p>
-        )}
-      </div>
-
-      <ul className="space-y-2">
-        {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-sm text-gray-700">
-            <svg
-              className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-            {f}
-          </li>
-        ))}
-      </ul>
-
-      {!isCurrentPlan && isUpgradable && upgradesAvailable && (
-        <form action="/dashboard/billing/upgrade" method="post" className="mt-auto">
-          <input type="hidden" name="plan" value={plan.id} />
-          <button
-            className="w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-black transition-colors"
-            type="submit"
-          >
-            Upgrade to {plan.name}
-          </button>
-        </form>
-      )}
-
-      {!isCurrentPlan && isUpgradable && !upgradesAvailable && (
-        <button
-          disabled
-          className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
-          title="Upgrades unavailable until users.plan exists in this deployment"
-        >
-          Upgrade unavailable
-        </button>
-      )}
-
-      {!isCurrentPlan && !isUpgradable && (
-        <button
-          disabled
-          className="mt-auto w-full py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 opacity-50 cursor-not-allowed"
-          title="You can only move to a higher plan"
-        >
-          Not available
-        </button>
-      )}
-    </div>
-  );
-}
+const PlanCard = dynamic(() => import("@/components/PlanCard"));
 
 // ── Usage meter ────────────────────────────────────────────────────────────────
 
@@ -247,15 +156,32 @@ export default async function BillingPage({
       <div>
         <h2 className="font-semibold text-gray-800 mb-4">Available plans</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {planOrder.map((pid) => (
-            <PlanCard
-              key={pid}
-              plan={PLANS[pid]}
-              isCurrentPlan={pid === currentPlanId}
-              isUpgradable={rank(pid) > rank(currentPlanId)}
-              upgradesAvailable={upgradesAvailable}
-            />
-          ))}
+          {planOrder.map((pid) => {
+            const isCurrent = pid === currentPlanId;
+            const isUp = rank(pid) > rank(currentPlanId);
+            const isDown = rank(pid) < rank(currentPlanId);
+            let canDowngrade = true;
+            let downgradeBlocker = "";
+            if (isDown) {
+              const limit = PLANS[pid].monthlyOrderLimit;
+              if (limit !== null && used > limit) {
+                canDowngrade = false;
+                downgradeBlocker = `You have used ${used} orders this month, which exceeds the ${PLANS[pid].name} plan limit of ${limit}. Wait until next month or reduce usage to downgrade.`;
+              }
+            }
+            return (
+              <PlanCard
+                key={pid}
+                plan={PLANS[pid]}
+                isCurrentPlan={isCurrent}
+                isUpgradable={isUp}
+                isDowngradable={isDown}
+                canDowngrade={canDowngrade}
+                downgradeBlocker={downgradeBlocker}
+                upgradesAvailable={upgradesAvailable}
+              />
+            );
+          })}
         </div>
       </div>
 
