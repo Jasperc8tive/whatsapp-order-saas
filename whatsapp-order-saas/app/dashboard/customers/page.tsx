@@ -6,7 +6,8 @@ import { OfflineCustomersPanel } from "@/components/OfflineCustomersPanel";
 import EditCustomerModal from "@/components/EditCustomerModal";
 import DeleteCustomerButton from "@/components/DeleteCustomerButton";
 import ImportCustomersButton from "@/components/ImportCustomersButton";
-import CustomersTable from "@/components/CustomersTable";
+import dynamic from "next/dynamic";
+const CustomersTable = dynamic(() => import("@/components/CustomersTable"), { ssr: false });
 
 // Matches the columns that exist in the Supabase customers table
 interface CustomerRow {
