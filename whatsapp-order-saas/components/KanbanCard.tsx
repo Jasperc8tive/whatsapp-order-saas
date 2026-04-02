@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useTransition, useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import type { Order, OrderStatus } from "@/types/order";
 import type { OrderAssignment } from "@/types/team";
 import { generateSmartReplySuggestions, trackSmartReplyUsage } from "@/lib/actions/orders";
@@ -106,11 +105,6 @@ export default function KanbanCard({
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: order.id, data: { order } });
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.35 : 1,
-  };
-
   const firstItem = order.items[0];
 
   // Build a wa.me link so vendors can tap the number and open WhatsApp immediately
@@ -167,13 +161,13 @@ export default function KanbanCard({
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
-      style={overlay ? undefined : style}
       className={[
         "bg-white rounded-xl border p-4 select-none",
         overlay
           ? "shadow-2xl rotate-1 scale-[1.03] border-green-300"
           : "border-gray-200 shadow-sm hover:shadow-md transition-shadow",
         isDragging ? "cursor-grabbing" : "",
+        !overlay && transform ? "translate-x-0 translate-y-0" : "",
       ]
         .filter(Boolean)
         .join(" ")}

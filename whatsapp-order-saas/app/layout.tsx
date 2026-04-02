@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import ClientSyncProvider from "@/components/ClientSyncProvider";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -18,6 +19,9 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "WhatsOrder — WhatsApp Order Management",
   description: "Manage WhatsApp orders for your business",
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 
@@ -25,19 +29,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <script dangerouslySetInnerHTML={{
-          __html: `
-            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/service-worker.js');
-              });
-            }
-          `
-        }} />
-      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ServiceWorkerRegister />
         <ClientSyncProvider />
         {children}
         <SpeedInsights />

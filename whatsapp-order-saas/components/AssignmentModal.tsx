@@ -205,13 +205,16 @@ export default function AssignmentModal({
             <form onSubmit={handleAssign} className="space-y-4">
               {/* Team member selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label htmlFor="assignment-user" className="block text-sm font-medium text-gray-900 mb-2">
                   Assign to
                 </label>
                 <select
+                  id="assignment-user"
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
                   disabled={isSaving}
+                  aria-label="Assign order to team member"
+                  title="Assign order to team member"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
                 >
                   <option value="">Select a team member...</option>
