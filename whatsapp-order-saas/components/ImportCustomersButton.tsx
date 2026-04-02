@@ -37,16 +37,23 @@ export default function ImportCustomersButton({ vendorId, onDone }: ImportCustom
   return (
     <>
       <button
+        type="button"
         onClick={() => fileInput.current?.click()}
         className="bg-green-600 hover:bg-green-700 text-white text-xs font-medium px-3 py-1 rounded-lg ml-2"
       >
         Import CSV
       </button>
+      <label htmlFor="import-customers-csv" className="sr-only">
+        Upload customers CSV file
+      </label>
       <input
+        id="import-customers-csv"
         ref={fileInput}
         type="file"
         accept=".csv"
-        style={{ display: "none" }}
+        className="sr-only"
+        title="Upload customers CSV file"
+        aria-label="Upload customers CSV file"
         onChange={handleFile}
       />
     </>

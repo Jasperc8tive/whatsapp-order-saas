@@ -69,11 +69,20 @@ function UsageMeter({ used, limit, planName }: UsageMeterProps) {
 
       {/* Progress bar */}
       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${
-            isFull ? "bg-red-500" : isWarning ? "bg-yellow-400" : "bg-green-500"
-          }`}
-          style={{ width: `${pct}%` }}
+        <progress
+          className={[
+            "w-full h-2 rounded-full overflow-hidden",
+            "[&::-webkit-progress-bar]:bg-gray-100 [&::-webkit-progress-bar]:rounded-full",
+            "[&::-webkit-progress-value]:rounded-full [&::-moz-progress-bar]:rounded-full",
+            isFull
+              ? "[&::-webkit-progress-value]:bg-red-500 [&::-moz-progress-bar]:bg-red-500"
+              : isWarning
+              ? "[&::-webkit-progress-value]:bg-yellow-400 [&::-moz-progress-bar]:bg-yellow-400"
+              : "[&::-webkit-progress-value]:bg-green-500 [&::-moz-progress-bar]:bg-green-500",
+          ].join(" ")}
+          value={pct}
+          max={100}
+          aria-label={`Monthly order usage: ${used} of ${limit}`}
         />
       </div>
 
