@@ -158,18 +158,20 @@ export async function parseOrderFromMessage(
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0)));
 
   // Validate that items is an array and each entry has the expected shape.
+  // The type predicate asserts `ParsedOrderItem` (product_id: string, product_name: string,
+  // quantity: number) — all three fields are validated explicitly before narrowing.
   const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
   const items = rawItems.filter(
     (item): item is ParsedOrderItem =>
       item !== null &&
       typeof item === "object" &&
-      typeof item.product_id === "string" &&
-      item.product_id.length > 0 &&
-      typeof item.product_name === "string" &&
-      item.product_name.length > 0 &&
-      typeof item.quantity === "number" &&
-      Number.isInteger(item.quantity) &&
-      item.quantity > 0
+      typeof (item as Record<string, unknown>).product_id === "string" &&
+      ((item as Record<string, unknown>).product_id as string).length > 0 &&
+      typeof (item as Record<string, unknown>).product_name === "string" &&
+      ((item as Record<string, unknown>).product_name as string).length > 0 &&
+      typeof (item as Record<string, unknown>).quantity === "number" &&
+      Number.isInteger((item as Record<string, unknown>).quantity) &&
+      ((item as Record<string, unknown>).quantity as number) > 0
   );
 
   let decision: ParseDecision;
