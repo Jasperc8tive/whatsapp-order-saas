@@ -129,40 +129,46 @@ async function handleWebhookPayload(payload: MetaWebhookPayload) {
 
       for (const message of value?.messages ?? []) {
         if (message.type !== "text") continue;
-        const messageText = message.text?.body ?? "";
-        if (!messageText.trim()) continue;
+        const messageText = (message.text?.body ?? "").trim();
+        if (!messageText) continue;
 
-        // Idempotency: skip if already processed
-        const { data: existing } = await admin
-          .from("inbound_message_events")
-          .select("id")
-          .eq("provider", "meta_whatsapp")
-          .eq("provider_message_id", message.id)
-          .maybeSingle();
-
-        if (existing) {
-          console.info("[whatsapp/webhook] Duplicate message, skipping:", message.id);
+        // Guard against excessively long messages to prevent downstream resource exhaustion
+        const MAX_MESSAGE_LENGTH = 5000;
+        if (messageText.length > MAX_MESSAGE_LENGTH) {
+          console.warn(
+            `[whatsapp/webhook] Message ${message.id} exceeds ${MAX_MESSAGE_LENGTH} chars — skipping.`
+          );
           continue;
         }
 
-        // Persist the event
+        // Idempotency: use upsert with onConflict to atomically deduplicate,
+        // avoiding the TOCTOU race condition of a separate check-then-insert.
         const { data: event, error: insertErr } = await admin
           .from("inbound_message_events")
-          .insert({
-            workspace_id:        vendor.id,
-            provider:            "meta_whatsapp",
-            provider_message_id: message.id,
-            from_phone:          message.from,
-            to_phone:            toPhone,
-            message_type:        message.type,
-            message_text:        messageText,
-            payload:             message,
-          })
+          .upsert(
+            {
+              workspace_id:        vendor.id,
+              provider:            "meta_whatsapp",
+              provider_message_id: message.id,
+              from_phone:          message.from,
+              to_phone:            toPhone,
+              message_type:        message.type,
+              message_text:        messageText,
+              payload:             message,
+            },
+            { onConflict: "provider_message_id", ignoreDuplicates: true }
+          )
           .select("id")
-          .single();
+          .maybeSingle();
 
-        if (insertErr || !event) {
+        if (insertErr) {
           console.error("[whatsapp/webhook] Failed to save event:", insertErr?.message);
+          continue;
+        }
+
+        // If event is null, a row with this provider_message_id already existed (duplicate).
+        if (!event) {
+          console.info("[whatsapp/webhook] Duplicate message, skipping:", message.id);
           continue;
         }
 
