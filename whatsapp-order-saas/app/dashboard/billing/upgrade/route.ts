@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { PLANS, PLAN_ORDER, type PlanId } from "@/lib/plans";
 import { initializeTransaction, toKobo } from "@/lib/paystack";
 
 const BILLING_PATH = "/dashboard/billing";
@@ -62,8 +62,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const order: PlanId[] = ["starter", "growth", "pro"];
-    if (order.indexOf(plan) <= order.indexOf(currentPlan)) {
+    if (PLAN_ORDER.indexOf(plan) <= PLAN_ORDER.indexOf(currentPlan)) {
       return NextResponse.redirect(
         new URL(
           `${BILLING_PATH}?error=${encodeURIComponent("You can only upgrade to a higher plan.")}`,

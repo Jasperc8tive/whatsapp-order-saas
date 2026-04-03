@@ -102,6 +102,16 @@ export function normalisePhone(raw: string): string {
   }
 
   // Already has country code (no leading zero, ≥12 digits)
+  if (digits.length >= 12) {
+    return digits;
+  }
+
+  // Unrecognised format — log a warning so it is visible in monitoring.
+  console.warn(
+    `[whatsapp] normalisePhone: unrecognised format for "${raw}" (${digits.length} digits). ` +
+    `Expected either an 11-digit Nigerian local number (0XXXXXXXXXX) or an international ` +
+    `number with country code (≥12 digits). Passing digits through as-is.`
+  );
   return digits;
 }
 

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PlanId = "starter" | "growth" | "pro";
 
-const PLAN_ORDER: PlanId[] = ["starter", "growth", "pro"];
+export const PLAN_ORDER: PlanId[] = ["starter", "growth", "pro"];
 
 export interface Plan {
   id: PlanId;

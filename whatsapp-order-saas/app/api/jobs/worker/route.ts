@@ -104,11 +104,8 @@ function authorizeWorkerRequest(request: Request): {
   }
 
   if (!workerSecret && !cronSecret) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Neither WORKER_SECRET nor CRON_SECRET is configured.",
-    };
+    console.error("[worker] Neither WORKER_SECRET nor CRON_SECRET is configured.");
+    return { ok: false, status: 401, error: "Unauthorized" };
   }
 
   return { ok: false, status: 401, error: "Unauthorized" };

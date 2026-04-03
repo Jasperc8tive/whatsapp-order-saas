@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { enqueueJob } from "@/lib/jobs";
 
 /**
  * POST /api/orders/[id]/assign
@@ -65,21 +66,17 @@ export async function POST(
     if (!assignedToUserId) {
       await admin.from("order_assignments").delete().eq("order_id", id);
 
-      // Log activity (non-blocking)
-      (async () => {
-        try {
-          await admin.from("activity_logs").insert({
-            workspace_id: order.vendor_id,
-            actor_id: user.id,
-            entity_type: "assignment",
-            entity_id: id,
-            action: "reassigned",
-            meta: { action: "unassigned", reason },
-          });
-        } catch {
-          // Ignore errors
-        }
-      })();
+      // Log activity via job queue (non-blocking, with retry)
+      enqueueJob("log_activity", {
+        workspaceId: order.vendor_id,
+        actorId: user.id,
+        entityType: "assignment",
+        entityId: id,
+        action: "reassigned",
+        meta: { action: "unassigned", reason },
+      }).catch((err: unknown) => {
+        console.error("[orders/assign] Failed to enqueue unassign log:", err);
+      });
 
       return NextResponse.json({
         success: true,
@@ -138,21 +135,17 @@ export async function POST(
       // Keep default name
     }
 
-    // 5. Log activity (non-blocking)
-    (async () => {
-      try {
-        await admin.from("activity_logs").insert({
-          workspace_id: order.vendor_id,
-          actor_id: user.id,
-          entity_type: "assignment",
-          entity_id: id,
-          action: "assigned",
-          meta: { assigned_to: assignedToUserId, assigned_to_name: managerName, reason },
-        });
-      } catch {
-        // Ignore errors
-      }
-    })();
+    // 5. Log activity via job queue (non-blocking, with retry)
+    enqueueJob("log_activity", {
+      workspaceId: order.vendor_id,
+      actorId: user.id,
+      entityType: "assignment",
+      entityId: id,
+      action: "assigned",
+      meta: { assigned_to: assignedToUserId, assigned_to_name: managerName, reason },
+    }).catch((err: unknown) => {
+      console.error("[orders/assign] Failed to enqueue assign log:", err);
+    });
 
     return NextResponse.json({
       success: true,

@@ -156,8 +156,20 @@ export async function parseOrderFromMessage(
   }
 
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0)));
-  const items = (parsed.items ?? []).filter(
-    (item) => item.product_id && item.product_name && item.quantity > 0
+
+  // Validate that items is an array and each entry has the expected shape.
+  const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const items = rawItems.filter(
+    (item): item is ParsedOrderItem =>
+      item !== null &&
+      typeof item === "object" &&
+      typeof item.product_id === "string" &&
+      item.product_id.length > 0 &&
+      typeof item.product_name === "string" &&
+      item.product_name.length > 0 &&
+      typeof item.quantity === "number" &&
+      Number.isInteger(item.quantity) &&
+      item.quantity > 0
   );
 
   let decision: ParseDecision;
