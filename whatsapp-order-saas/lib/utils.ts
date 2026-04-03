@@ -126,6 +126,9 @@ export const offlineDB = {
 };
 import type { OrderStatus } from "@/types/order";
 
+function formatCurrency(amount: number, currency: string = "NGN"): string {
+  return amount.toLocaleString(undefined, { style: "currency", currency });
+}
 export function formatCurrency(amount: number, currency = "NGN"): string {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
