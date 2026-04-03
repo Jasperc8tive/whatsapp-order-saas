@@ -2,11 +2,13 @@ import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DraggableOrderCard } from "../components/DraggableOrderCard";
 import { EmptyState } from "../components/EmptyState";
+import { showLoadError, showUpdateError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { radius, shadows, spacing, statusColors, statusColorsDark, typography, useThemeColors } from "../lib/theme";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import { orderService } from "../services/orderService";
@@ -41,7 +43,7 @@ export function OrdersScreen(_: Props) {
       const rows = await orderService.listOrders();
       setOrders(rows);
     } catch (error) {
-      Alert.alert("Failed to load orders", (error as Error).message);
+      showLoadError(ALERT_TITLES.error.unableToLoadOrders, error, "Unable to load orders right now.");
     } finally {
       setLoading(false);
     }
@@ -65,7 +67,7 @@ export function OrdersScreen(_: Props) {
     try {
       await orderService.updateOrderStatus(orderId, status);
     } catch (error) {
-      Alert.alert("Update failed", (error as Error).message);
+      showUpdateError(ALERT_TITLES.error.unableToUpdateOrder, error, "Unable to update this order right now.");
       await loadOrders();
     }
   };

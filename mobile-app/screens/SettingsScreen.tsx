@@ -4,12 +4,14 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
 import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppButton } from "../components/AppButton";
 import { Avatar } from "../components/Avatar";
+import { showSaveError, showSuccess } from "../lib/alertHelpers";
 import { ENV } from "../lib/env";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { radius, shadows, spacing, typography, useThemeColors } from "../lib/theme";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import { settingsService } from "../services/settingsService";
@@ -85,9 +87,9 @@ export function SettingsScreen(_: Props) {
         slug,
         whatsapp_number: whatsapp,
       });
-      Alert.alert("Saved", "Business settings updated.");
+      showSuccess(ALERT_TITLES.success.saved, "Business settings updated.");
     } catch (error) {
-      Alert.alert("Update failed", (error as Error).message);
+      showSaveError(ALERT_TITLES.error.unableToSaveSettings, error, "Unable to update settings right now.");
     } finally {
       setSaving(false);
     }

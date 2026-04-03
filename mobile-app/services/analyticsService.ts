@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { ENV } from "../lib/env";
 import { supabase } from "./supabaseClient";

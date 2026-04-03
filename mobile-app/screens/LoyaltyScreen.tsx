@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showInfo, showLoadError, showSaveError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { formatCurrency } from "../lib/format";
 import { useThemeColors } from "../lib/theme";
 import { loyaltyService, type LoyaltyOverview } from "../services/loyaltyService";
@@ -40,7 +42,7 @@ export function LoyaltyScreen() {
         setRewardThresholdInput(String(Number(data.rewardThreshold ?? 100)));
       }
     } catch (error) {
-      Alert.alert("Failed to load loyalty", (error as Error).message);
+      showLoadError(ALERT_TITLES.error.unableToLoadLoyalty, error, "Unable to load loyalty data right now.");
     } finally {
       setLoading(false);
     }
@@ -48,7 +50,7 @@ export function LoyaltyScreen() {
 
   const saveRules = async () => {
     if (role !== "owner") {
-      Alert.alert("Restricted", "Only workspace owners can edit loyalty rules.");
+      showInfo(ALERT_TITLES.info.actionNotAllowed, "Only workspace owners can edit loyalty rules.");
       return;
     }
 
@@ -56,12 +58,12 @@ export function LoyaltyScreen() {
     const rewardThreshold = Math.floor(Number(rewardThresholdInput));
 
     if (!Number.isFinite(pointsPerOrder) || pointsPerOrder <= 0) {
-      Alert.alert("Invalid rule", "Points per order must be a positive integer.");
+      showInfo(ALERT_TITLES.info.checkDetails, "Points per order must be a positive integer.");
       return;
     }
 
     if (!Number.isFinite(rewardThreshold) || rewardThreshold <= 0) {
-      Alert.alert("Invalid rule", "Reward threshold must be a positive integer.");
+      showInfo(ALERT_TITLES.info.checkDetails, "Reward threshold must be a positive integer.");
       return;
     }
 
@@ -72,9 +74,9 @@ export function LoyaltyScreen() {
         loyalty_reward_threshold: rewardThreshold,
       });
       await load();
-      Alert.alert("Saved", "Loyalty rules updated.");
+      showSuccess(ALERT_TITLES.success.saved, "Loyalty rules updated.");
     } catch (error) {
-      Alert.alert("Save failed", (error as Error).message);
+      showSaveError(ALERT_TITLES.error.unableToSaveLoyaltyRules, error, "Unable to save loyalty rules right now.");
     } finally {
       setSavingRules(false);
     }

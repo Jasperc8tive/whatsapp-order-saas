@@ -2,12 +2,13 @@ import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useState } from "react";
-import { Alert, FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
 
 import { BottomActionButton } from "../components/BottomActionButton";
 import { EmptyState } from "../components/EmptyState";
 import { ProductCard } from "../components/ProductCard";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showConfirmDeletion } from "../lib/alertHelpers";
 import { spacing } from "../lib/theme";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import { productService } from "../services/productService";
@@ -31,17 +32,10 @@ export function ProductsScreen(_: Props) {
   );
 
   const remove = (id: string) => {
-    Alert.alert("Delete product", "This action cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await productService.deleteProduct(id);
-          await load();
-        },
-      },
-    ]);
+    showConfirmDeletion("This action cannot be undone.", async () => {
+      await productService.deleteProduct(id);
+      await load();
+    });
   };
 
   return (

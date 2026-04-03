@@ -16,7 +16,8 @@
       "package": "com.whatsorder.mobile"
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      "expo-font"
     ],
     "extra": {
       "apiBaseUrl": "https://whatsorder.app"

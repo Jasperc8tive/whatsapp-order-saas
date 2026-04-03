@@ -1,11 +1,13 @@
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import React, { useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showCreateError, showInfo, showStartError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import { aiParsingService } from "../services/aiParsingService";
 
@@ -21,7 +23,7 @@ export function VoiceCaptureScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Permission denied", "Microphone permission is required.");
+        showInfo(ALERT_TITLES.info.microphoneAccessNeeded, "Microphone permission is required.");
         return;
       }
 
@@ -35,7 +37,7 @@ export function VoiceCaptureScreen() {
       await rec.startAsync();
       setRecording(rec);
     } catch (error) {
-      Alert.alert("Recording error", (error as Error).message);
+      showStartError(ALERT_TITLES.error.unableToStartRecording, error, "Unable to start recording right now.");
     }
   };
 
@@ -49,7 +51,7 @@ export function VoiceCaptureScreen() {
       setRecording(null);
 
       if (!uri) {
-        Alert.alert("Recording error", "Could not access recorded audio file.");
+        showInfo(ALERT_TITLES.error.unableToAccessRecording, "Could not access recorded audio file.");
         return;
       }
 
@@ -60,9 +62,9 @@ export function VoiceCaptureScreen() {
       const result = await aiParsingService.parseVoiceMessage(base64, "audio/m4a", customerPhone.trim() || undefined);
       setTranscription(result.transcription ?? "");
       setParseSummary(`Confidence: ${(result.confidence ?? 0).toFixed(2)} | Items: ${result.items?.length ?? 0}`);
-      Alert.alert("Voice parsed", "Draft captured successfully.");
+      showSuccess(ALERT_TITLES.success.draftReady, "Draft captured successfully.");
     } catch (error) {
-      Alert.alert("Parse failed", (error as Error).message);
+      showCreateError(ALERT_TITLES.error.unableToParseVoiceNote, error, "Unable to parse this voice note right now.");
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showErrorAlert } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import type { AuthStackParamList } from "../navigation/AuthStack";
 import { authService } from "../services/authService";
@@ -22,7 +24,7 @@ export function LoginScreen({ navigation }: Props) {
       setLoading(true);
       await authService.signIn(email.trim(), password);
     } catch (error) {
-      Alert.alert("Login failed", (error as Error).message);
+      showErrorAlert(ALERT_TITLES.error.unableToSignIn, error, "Unable to sign in right now.");
     } finally {
       setLoading(false);
     }

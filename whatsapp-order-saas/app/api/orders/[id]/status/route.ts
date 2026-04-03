@@ -123,9 +123,18 @@ export async function PATCH(
       });
     }
 
+    // 6. Refresh daily metrics for this vendor
+    await enqueueJob("analytics_queue", {
+      vendorId: order.vendor_id,
+      date: new Date().toISOString().slice(0, 10),
+    }).catch(() => {
+      // Non-critical; nightly pg_cron is the reliable fallback
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[orders/[id]/status] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

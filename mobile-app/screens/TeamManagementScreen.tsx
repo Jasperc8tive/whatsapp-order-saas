@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showSendError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import { teamService } from "../services/teamService";
 import type { WorkspaceMember, WorkspaceRole } from "../types/domain";
@@ -28,11 +30,11 @@ export function TeamManagementScreen() {
   const invite = async () => {
     try {
       await teamService.inviteMember(email.trim(), role);
-      Alert.alert("Invite sent", `Invitation sent to ${email}`);
+      showSuccess(ALERT_TITLES.success.sent, `Invitation sent to ${email}`);
       setEmail("");
       await load();
     } catch (error) {
-      Alert.alert("Invite failed", (error as Error).message);
+      showSendError(ALERT_TITLES.error.unableToSendInvite, error, "Unable to send this invitation right now.");
     }
   };
 

@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showSendError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import type { AuthStackParamList } from "../navigation/AuthStack";
 import { authService } from "../services/authService";
@@ -20,10 +22,10 @@ export function PasswordResetScreen({ navigation }: Props) {
     try {
       setLoading(true);
       await authService.resetPassword(email.trim());
-      Alert.alert("Reset link sent", "Check your email for the password reset link.");
+      showSuccess(ALERT_TITLES.success.checkInbox, "Check your email for the password reset link.");
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Failed", (error as Error).message);
+      showSendError(ALERT_TITLES.error.unableToSendResetLink, error, "Unable to send a reset link right now.");
     } finally {
       setLoading(false);
     }

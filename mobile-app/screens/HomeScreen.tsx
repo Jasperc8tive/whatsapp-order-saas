@@ -10,6 +10,7 @@ import { OrderCard } from "../components/OrderCard";
 import { SectionHeader } from "../components/SectionHeader";
 import { EmptyState } from "../components/EmptyState";
 import { formatCurrency } from "../lib/format";
+import { clearInlineError, setDashboardInlineError } from "../lib/inlineErrorHelpers";
 import { brand, radius, shadows, spacing, typography, useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
 import { homeService } from "../services/homeService";
@@ -31,8 +32,10 @@ export function HomeScreen() {
   const [metrics, setMetrics] = useState<DailyMetrics>(INITIAL);
   const [latestOrders, setLatestOrders] = useState<Order[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastLiveSyncAt, setLastLiveSyncAt] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (source: "manual" | "realtime" = "manual") => {
     try {
       const [data, orders] = await Promise.all([
         homeService.getDailyMetrics(),
@@ -40,15 +43,26 @@ export function HomeScreen() {
       ]);
       setMetrics(data);
       setLatestOrders(orders.slice(0, 5));
-    } catch {
-      // silent refresh failure
+      clearInlineError(setLoadError);
+      if (source === "realtime") {
+        setLastLiveSyncAt(new Date());
+      }
+    } catch (error) {
+      setDashboardInlineError(setLoadError, error);
     }
   }, []);
 
   useEffect(() => {
     load();
-    const unsub = orderService.subscribeToOrders(load);
-    return unsub;
+    const onRealtimeRefresh = () => {
+      load("realtime");
+    };
+    const unsubOrders = orderService.subscribeToOrders(onRealtimeRefresh);
+    const unsubMetrics = homeService.subscribeToDailyMetrics(onRealtimeRefresh);
+    return () => {
+      unsubOrders();
+      unsubMetrics();
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
@@ -76,6 +90,18 @@ export function HomeScreen() {
             <Text style={[typography.displayMd, { color: "#fff", marginTop: 2 }]}>
               {user?.email?.split("@")[0] ?? "Vendor"} 👋
             </Text>
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={[styles.liveText, { color: "rgba(255,255,255,0.86)" }]}>Live</Text>
+              {lastLiveSyncAt ? (
+                <Text style={[styles.liveSubtext, { color: "rgba(255,255,255,0.7)" }]}>updated {lastLiveSyncAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
+              ) : null}
+            </View>
+            {loadError ? (
+              <Text style={[styles.errorHint, { color: "#FEF3C7" }]} numberOfLines={2}>
+                {loadError}
+              </Text>
+            ) : null}
           </View>
           <Pressable
             onPress={() => navigation.navigate("AIDrafts")}
@@ -187,6 +213,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
+  },
+  liveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "#22C55E",
+  },
+  liveText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  liveSubtext: {
+    fontSize: 12,
+  },
+  errorHint: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
   },
   section: {
     paddingHorizontal: spacing.md,

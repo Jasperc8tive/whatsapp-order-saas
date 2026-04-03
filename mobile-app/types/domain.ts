@@ -10,6 +10,8 @@ export type OrderStatus =
 
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "failed";
 
+export type OrderSource = "whatsapp" | "store_link" | "manual" | "ai_parsed";
+
 export type DeliveryStatus =
   | "not_dispatched"
   | "dispatched"
@@ -78,6 +80,7 @@ export interface Order {
   customer_id: string | null;
   order_status: OrderStatus;
   payment_status: PaymentStatus;
+  source?: OrderSource;
   total_amount: number;
   notes: string | null;
   whatsapp_msg_id: string | null;
@@ -134,4 +137,19 @@ export interface DailyMetrics {
   revenueToday: number;
   pendingDeliveries: number;
   newOrders: number;
+}
+
+export type SubscriptionStatus = "active" | "cancelled" | "past_due" | "trialing" | "paused";
+
+export interface Subscription {
+  id: string;
+  vendor_id: string;
+  plan: PlanId;
+  status: SubscriptionStatus;
+  current_period_start: string;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

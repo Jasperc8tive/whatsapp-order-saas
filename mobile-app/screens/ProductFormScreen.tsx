@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Switch, Text } from "react-native";
+import { StyleSheet, Switch, Text } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showSaveError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
 import { productService } from "../services/productService";
@@ -59,7 +61,7 @@ export function ProductFormScreen({ route, navigation }: Props) {
 
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Failed", (error as Error).message);
+      showSaveError(ALERT_TITLES.error.unableToSaveProduct, error, "Unable to save this product right now.");
     }
   };
 

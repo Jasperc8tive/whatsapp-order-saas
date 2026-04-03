@@ -1,10 +1,12 @@
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showInfo, showLoadError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import { marketplaceService, type MarketplaceVendor } from "../services/marketplaceService";
 
@@ -20,7 +22,7 @@ export function MarketplaceScreen() {
       const rows = await marketplaceService.listVendors(q);
       setVendors(rows);
     } catch (error) {
-      Alert.alert("Failed to load marketplace", (error as Error).message);
+      showLoadError(ALERT_TITLES.error.unableToLoadMarketplace, error, "Unable to load marketplace listings right now.");
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ export function MarketplaceScreen() {
                 variant="secondary"
                 onPress={() => {
                   if (!vendor.whatsappNumber) {
-                    Alert.alert("No number", "This vendor has no public WhatsApp number yet.");
+                    showInfo(ALERT_TITLES.info.whatsappUnavailable, "This vendor has no public WhatsApp number yet.");
                     return;
                   }
                   const wa = `https://wa.me/${vendor.whatsappNumber.replace(/\D/g, "")}`;

@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showSaveError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
 import { customerService } from "../services/customerService";
@@ -52,7 +54,7 @@ export function CustomerFormScreen({ route, navigation }: Props) {
 
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Save failed", (error as Error).message);
+      showSaveError(ALERT_TITLES.error.unableToSaveCustomer, error, "Unable to save this customer right now.");
     } finally {
       setLoading(false);
     }

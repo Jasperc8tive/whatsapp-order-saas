@@ -2,14 +2,17 @@ import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppInput } from "../components/AppInput";
 import { Avatar } from "../components/Avatar";
 import { SectionHeader } from "../components/SectionHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { showConfirmDeletion, showInfo, showLoadError, showSuccess, showUpdateError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { formatCurrency, formatDateTime } from "../lib/format";
+import { clearInlineError, setLoyaltyInlineError } from "../lib/inlineErrorHelpers";
 import { radius, shadows, spacing, typography, useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
 import { customerService } from "../services/customerService";
@@ -24,6 +27,7 @@ export function CustomerProfileScreen({ route, navigation }: Props) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ledger, setLedger] = useState<LoyaltyLedger | null>(null);
+  const [loyaltyLoadError, setLoyaltyLoadError] = useState<string | null>(null);
   const [pointsInput, setPointsInput] = useState("10");
   const [reasonInput, setReasonInput] = useState("");
 
@@ -47,18 +51,22 @@ export function CustomerProfileScreen({ route, navigation }: Props) {
       try {
         const loyaltyLedger = await loyaltyService.getCustomerLedger(route.params.customerId, 10);
         setLedger(loyaltyLedger);
-      } catch {
+        clearInlineError(setLoyaltyLoadError);
+      } catch (error) {
         setLedger(null);
+        setLoyaltyInlineError(setLoyaltyLoadError, error);
       }
     };
 
-    load().catch(() => undefined);
+    load().catch((error) => {
+      showLoadError(ALERT_TITLES.error.unableToLoadCustomer, error, "Please try again.");
+    });
   }, [route.params.customerId]);
 
   const runLoyaltyAction = async (action: "bonus" | "redeem") => {
     const points = Math.floor(Number(pointsInput));
     if (!Number.isFinite(points) || points <= 0) {
-      Alert.alert("Invalid points", "Enter a positive points value.");
+      showInfo(ALERT_TITLES.info.checkDetails, "Enter a positive points value.");
       return;
     }
 
@@ -72,24 +80,17 @@ export function CustomerProfileScreen({ route, navigation }: Props) {
       const refreshed = await loyaltyService.getCustomerLedger(route.params.customerId, 10);
       setLedger(refreshed);
       setReasonInput("");
-      Alert.alert("Updated", action === "bonus" ? "Bonus points added." : "Reward redeemed.");
+      showSuccess(ALERT_TITLES.success.updated, action === "bonus" ? "Bonus points added." : "Reward redeemed.");
     } catch (error) {
-      Alert.alert("Loyalty update failed", (error as Error).message);
+      showUpdateError(ALERT_TITLES.error.unableToUpdateLoyalty, error, "Unable to update loyalty points right now.");
     }
   };
 
   const deleteCustomer = () => {
-    Alert.alert("Delete customer", "This will remove the customer record.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await customerService.deleteCustomer(route.params.customerId);
-          navigation.goBack();
-        },
-      },
-    ]);
+    showConfirmDeletion("This will remove the customer record.", async () => {
+      await customerService.deleteCustomer(route.params.customerId);
+      navigation.goBack();
+    });
   };
 
   return (
@@ -185,6 +186,12 @@ export function CustomerProfileScreen({ route, navigation }: Props) {
                 <Text style={[typography.headingSm, { color: colors.warning, marginLeft: 5 }]}>Redeem</Text>
               </Pressable>
             </View>
+
+            {loyaltyLoadError ? (
+              <Text style={[typography.bodySm, { color: colors.warning, marginTop: spacing.sm }]}>
+                {loyaltyLoadError}
+              </Text>
+            ) : null}
 
             {(ledger?.transactions ?? []).length > 0 && (
               <View style={[styles.ledger, { borderTopColor: colors.border }]}>

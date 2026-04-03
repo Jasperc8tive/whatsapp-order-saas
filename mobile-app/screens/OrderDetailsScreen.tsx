@@ -2,12 +2,14 @@ import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "../components/Avatar";
 import { StatusBadge } from "../components/StatusBadge";
 import { SectionHeader } from "../components/SectionHeader";
+import { showCreateError, showInfo, showSuccess, showUpdateError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { formatCurrency, formatDateTime } from "../lib/format";
 import { radius, shadows, spacing, typography, useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -47,9 +49,9 @@ export function OrderDetailsScreen({ route, navigation }: Props) {
         method: "PATCH",
         body: JSON.stringify({ orderId: route.params.orderId, action: "assign_delivery" }),
       });
-      Alert.alert("Assigned", "Order assigned for delivery queue.");
+      showSuccess(ALERT_TITLES.success.updated, "Order assigned for delivery queue.");
     } catch (error) {
-      Alert.alert("Failed", (error as Error).message);
+      showUpdateError(ALERT_TITLES.error.unableToAssignDelivery, error, "Unable to assign this order for delivery right now.");
     }
   };
 
@@ -62,7 +64,7 @@ export function OrderDetailsScreen({ route, navigation }: Props) {
 
   const generatePaymentLink = async () => {
     if (!order?.customers?.email) {
-      Alert.alert("Missing email", "Customer email is required to generate a Paystack payment link.");
+      showInfo(ALERT_TITLES.info.emailRequired, "Customer email is required to generate a Paystack payment link.");
       return;
     }
 
@@ -81,7 +83,7 @@ export function OrderDetailsScreen({ route, navigation }: Props) {
         message: `Pay for order #${order.id.slice(0, 8)}: ${response.authorization_url}`,
       });
     } catch (error) {
-      Alert.alert("Payment link failed", (error as Error).message);
+      showCreateError(ALERT_TITLES.error.unableToCreatePaymentLink, error, "Unable to generate a payment link right now.");
     }
   };
 

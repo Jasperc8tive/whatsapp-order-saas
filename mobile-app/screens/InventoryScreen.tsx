@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showLoadError, showUpdateError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import { productService } from "../services/productService";
 import type { Product } from "../types/domain";
@@ -18,7 +20,7 @@ export function InventoryScreen() {
       const rows = await productService.listProducts();
       setProducts(rows.filter((item) => item.track_inventory));
     } catch (error) {
-      Alert.alert("Failed to load inventory", (error as Error).message);
+      showLoadError(ALERT_TITLES.error.unableToLoadInventory, error, "Unable to load inventory right now.");
     } finally {
       setLoading(false);
     }
@@ -39,7 +41,7 @@ export function InventoryScreen() {
       await productService.updateProduct(item.id, { stock_quantity: next });
       setProducts((prev) => prev.map((row) => (row.id === item.id ? { ...row, stock_quantity: next } : row)));
     } catch (error) {
-      Alert.alert("Stock update failed", (error as Error).message);
+      showUpdateError(ALERT_TITLES.error.unableToUpdateStock, error, "Unable to update stock right now.");
     }
   };
 

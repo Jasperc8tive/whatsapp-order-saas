@@ -8,7 +8,7 @@ import { NotificationJobPayload } from "@/lib/notificationQueue";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_QUEUES = ["process_inbound_message", "notify_staff_draft", "automation_event", "log_activity"];
+const DEFAULT_QUEUES = ["process_inbound_message", "notify_staff_draft", "automation_event", "log_activity", "analytics_queue"];
 
 export async function GET(request: Request) {
   return handleWorkerRequest(request);
@@ -159,6 +159,11 @@ async function executeJob(queue: string, payload: Record<string, unknown>): Prom
     return;
   }
 
+  if (queue === "analytics_queue") {
+    await handleAnalyticsQueue(payload);
+    return;
+  }
+
   throw new Error(`Unsupported queue: ${queue}`);
 
 
@@ -193,6 +198,29 @@ async function handleNotificationOutbound(payload: Record<string, unknown>): Pro
   // TODO: Add SMS, email, in-app notification support
   throw new Error(`Unsupported notification channel: ${job.channel}`);
 }
+}
+
+/**
+ * analytics_queue handler
+ *
+ * Payload: { vendorId: string; date?: string }
+ * Calls the SECURITY DEFINER SQL function upsert_daily_metrics(vendorId, date)
+ * which aggregates orders/revenue/new_customers into the daily_metrics table.
+ * Safe to call multiple times — it is fully idempotent (INSERT ... ON CONFLICT DO UPDATE).
+ */
+async function handleAnalyticsQueue(payload: Record<string, unknown>): Promise<void> {
+  const vendorId = String(payload.vendorId ?? "");
+  const dateStr = payload.date ? String(payload.date) : new Date().toISOString().slice(0, 10);
+
+  if (!vendorId) throw new Error("analytics_queue: missing vendorId");
+
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("upsert_daily_metrics", {
+    p_vendor_id: vendorId,
+    p_date: dateStr,
+  });
+
+  if (error) throw new Error(`upsert_daily_metrics failed: ${error.message}`);
 }
 
 async function notifyStaffDraft(payload: Record<string, unknown>): Promise<void> {

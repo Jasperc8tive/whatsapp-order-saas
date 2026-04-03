@@ -1,9 +1,11 @@
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showStartError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { formatCurrency } from "../lib/format";
 import { useThemeColors } from "../lib/theme";
 import { billingService } from "../services/billingService";
@@ -37,10 +39,10 @@ export function BillingScreen() {
       if (response.authorizationUrl) {
         await Linking.openURL(response.authorizationUrl);
       } else {
-        Alert.alert("Upgrade created", "Continue payment on web checkout.");
+        showSuccess(ALERT_TITLES.success.continueOnWeb, "Continue payment on web checkout.");
       }
     } catch (error) {
-      Alert.alert("Billing error", (error as Error).message);
+      showStartError(ALERT_TITLES.error.unableToStartUpgrade, error, "Unable to start your upgrade right now.");
     }
   };
 

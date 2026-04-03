@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { AppButton } from "../components/AppButton";
 import { AppInput } from "../components/AppInput";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showSendError, showSuccess } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { ENV } from "../lib/env";
 import { useThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -32,8 +34,8 @@ export function MarketingScreen() {
       setLoading(true);
       const response = await marketingService.sendCampaign(campaignMessage, segment);
       setResult(response);
-      Alert.alert(
-        "Campaign sent",
+      showSuccess(
+        ALERT_TITLES.success.sent,
         `Delivered to ${response.sent}/${response.recipientCount} recipients.`,
         [
           {
@@ -47,7 +49,7 @@ export function MarketingScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert("Campaign failed", (error as Error).message);
+      showSendError(ALERT_TITLES.error.unableToSendCampaign, error, "Unable to send this campaign right now.");
     } finally {
       setLoading(false);
     }

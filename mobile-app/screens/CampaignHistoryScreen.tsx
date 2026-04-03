@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { ScreenContainer } from "../components/ScreenContainer";
+import { showLoadError } from "../lib/alertHelpers";
+import { ALERT_TITLES } from "../lib/alertTitles";
 import { useThemeColors } from "../lib/theme";
 import { marketingService, type CampaignHistoryItem } from "../services/marketingService";
 
@@ -26,7 +28,7 @@ export function CampaignHistoryScreen() {
       const data = await marketingService.listCampaignHistory(50);
       setRows(data);
     } catch (error) {
-      Alert.alert("Failed to load history", (error as Error).message);
+      showLoadError(ALERT_TITLES.error.unableToLoadCampaignHistory, error, "Unable to load campaign history right now.");
     } finally {
       setLoading(false);
     }
