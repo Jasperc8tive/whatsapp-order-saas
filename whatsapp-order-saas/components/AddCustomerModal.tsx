@@ -6,6 +6,15 @@ import { supabase } from "@/lib/supabaseClient";
 
 type Step = "form" | "success";
 
+// Nigeria phone number validation utility
+function isValidNigerianPhone(phone: string): boolean {
+  // Accepts: 080xxxxxxxx, 070xxxxxxxx, 081xxxxxxxx, 090xxxxxxxx, 091xxxxxxxx, or +2348xxxxxxxx, +2347xxxxxxxx, +2349xxxxxxxx, +2341xxxxxxxx
+  // Must be 11 digits (local) or 14 (+234xxxxxxxxxx)
+  const local = /^(080|070|081|090|091)\d{8}$/;
+  const intl = /^\+234(80|70|81|90|91)\d{8}$/;
+  return local.test(phone) || intl.test(phone);
+}
+
 export default function AddCustomerModal({ vendorId }: { vendorId: string }) {
   const router = useRouter();
   const [open, setOpen]       = useState(false);
@@ -38,6 +47,10 @@ export default function AddCustomerModal({ vendorId }: { vendorId: string }) {
     }
     if (!form.phone.trim()) {
       setError("Phone number is required.");
+      return;
+    }
+    if (!isValidNigerianPhone(form.phone.trim())) {
+      setError("Enter a valid Nigerian phone number (e.g. 08012345678 or +2348012345678)");
       return;
     }
 
@@ -75,10 +88,10 @@ export default function AddCustomerModal({ vendorId }: { vendorId: string }) {
       {/* Modal backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-2 sm:px-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-6">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-5">

@@ -1,7 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { assignOrder, unassignOrder, listAssignableMembers } from "@/lib/actions/assignments";
+import { useEffect } from "react";
+import { useState } from "react";
+// Fetch suggested assignee from backend
+async function fetchSuggestedAssignee(order: any, managers: any[], vendorId: string) {
+  const res = await fetch("/api/orders/suggested-assignee", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order, managers, vendorId })
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
 import type { OrderAssignment } from "@/types/team";
 
 interface AssignmentModalProps {
@@ -26,9 +37,15 @@ export default function AssignmentModal({
   onClose,
   onAssigned,
 }: AssignmentModalProps) {
+  // Optimistic assignment state
+  const [optimisticAssignment, setOptimisticAssignment] = useState<OrderAssignment | null>(currentAssignment);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>(currentAssignment?.assigned_to ?? "");
+  const [suggested, setSuggested] = useState<any | null>(null);
+  const [showSuggestion, setShowSuggestion] = useState(true);
   const [reason, setReason] = useState<string>(currentAssignment?.reason ?? "");
+  // Track if override is required (auto-assigned and user is changing assignee)
+  const [overrideRequired, setOverrideRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,13 +57,25 @@ export default function AssignmentModal({
       const result = await listAssignableMembers(workspaceId);
       if (result.error) {
         setError(result.error);
-      } else {
-        setAssignees(result.members ?? []);
+        setIsLoading(false);
+        return;
+      }
+      setAssignees(result.members ?? []);
+      // Try to fetch suggested assignee if orderId and members available
+      if (orderId && result.members && result.members.length > 0) {
+        // Fetch order details from parent if available, else minimal stub
+        const order = { id: orderId, vendor_id: workspaceId };
+        const vendorId = workspaceId;
+        const suggestion = await fetchSuggestedAssignee(order, result.members, vendorId);
+        if (suggestion && suggestion.assignedTo) {
+          setSuggested(suggestion);
+          setSelectedUserId((prev) => prev || suggestion.assignedTo);
+        }
       }
       setIsLoading(false);
     }
     load();
-  }, [workspaceId]);
+  }, [workspaceId, orderId]);
 
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
@@ -54,15 +83,40 @@ export default function AssignmentModal({
     setSuccess(false);
     setIsSaving(true);
 
+    // Check if override reason is required
+    const isAutoAssigned = currentAssignment?.reason?.toLowerCase().includes("auto-assigned");
+    const isOverride = !!(isAutoAssigned && selectedUserId && selectedUserId !== currentAssignment?.assigned_to);
+    setOverrideRequired(isOverride);
+    if (isOverride && !reason.trim()) {
+      setError("Reason is required when overriding an auto-assigned assignment.");
+      setIsSaving(false);
+      return;
+    }
+
+    // Optimistic update
+    const prevAssignment = optimisticAssignment;
+    setOptimisticAssignment({
+      id: "pending",
+      order_id: orderId,
+      assigned_to: selectedUserId,
+      assigned_by: "me",
+      reason: reason || null,
+      created_at: new Date().toISOString(),
+      assignee_name: assignees.find(a => a.user_id === selectedUserId)?.display_name ?? null,
+      assignee_email: assignees.find(a => a.user_id === selectedUserId)?.email ?? null,
+    });
+
     try {
       if (!selectedUserId) {
         setError("Please select a team member.");
+        setOptimisticAssignment(prevAssignment);
         return;
       }
 
       const result = await assignOrder(orderId, selectedUserId, reason || undefined);
       if (result.error) {
         setError(result.error);
+        setOptimisticAssignment(prevAssignment); // Rollback
       } else {
         setSuccess(true);
         onAssigned?.(null); // Trigger refetch
@@ -76,11 +130,13 @@ export default function AssignmentModal({
   async function handleUnassign() {
     setError(null);
     setIsSaving(true);
-
+    const prevAssignment = optimisticAssignment;
+    setOptimisticAssignment(null);
     try {
       const result = await unassignOrder(orderId);
       if (result.error) {
         setError(result.error);
+        setOptimisticAssignment(prevAssignment); // Rollback
       } else {
         setSelectedUserId("");
         setReason("");
@@ -116,16 +172,49 @@ export default function AssignmentModal({
               </p>
             )}
 
+            {suggested && showSuggestion && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                <div className="font-medium text-blue-800 mb-1">Suggested assignee</div>
+                <div className="text-sm text-blue-900">
+                  {assignees.find(a => a.user_id === suggested.assignedTo)?.display_name || "Manager"}
+                  {suggested.reason && (
+                    <>
+                      <br />
+                      <span className="text-xs text-blue-700">Reason: {suggested.reason}</span>
+                    </>
+                  )}
+                  {suggested.explanations && suggested.explanations.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-blue-600">Show scoring details</summary>
+                      <ul className="text-xs text-blue-900 mt-1">
+                        {suggested.explanations.map((ex: any) => (
+                          <li key={ex.managerId}>
+                            <b>{assignees.find(a => a.user_id === ex.managerId)?.display_name || ex.managerId}:</b> Score {ex.score} ({ex.reason})
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button type="button" className="px-3 py-1 bg-blue-600 text-white rounded text-xs" onClick={() => { setSelectedUserId(suggested.assignedTo); setShowSuggestion(false); }}>Accept</button>
+                  <button type="button" className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs" onClick={() => setShowSuggestion(false)}>Dismiss</button>
+                </div>
+              </div>
+            )}
             <form onSubmit={handleAssign} className="space-y-4">
               {/* Team member selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label htmlFor="assignment-user" className="block text-sm font-medium text-gray-900 mb-2">
                   Assign to
                 </label>
                 <select
+                  id="assignment-user"
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
                   disabled={isSaving}
+                  aria-label="Assign order to team member"
+                  title="Assign order to team member"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
                 >
                   <option value="">Select a team member...</option>
@@ -137,19 +226,25 @@ export default function AssignmentModal({
                 </select>
               </div>
 
-              {/* Reason (optional) */}
+              {/* Reason (required if overriding auto-assigned) */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Reason (optional)
+                  Reason{overrideRequired ? " (required for override)" : " (optional)"}
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Specialist handling this order"
+                  placeholder={overrideRequired ? "Required: explain override" : "e.g., Specialist handling this order"}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   disabled={isSaving}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
+                  required={overrideRequired}
+                  className={["w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 text-sm",
+                    overrideRequired ? "border-red-400 focus:ring-red-400" : "border-gray-300 focus:ring-green-400"
+                  ].join(" ")}
                 />
+                {overrideRequired && !reason.trim() && (
+                  <p className="text-xs text-red-600 mt-1">Reason is required when overriding an auto-assigned assignment.</p>
+                )}
               </div>
 
               {/* Current assignment info */}

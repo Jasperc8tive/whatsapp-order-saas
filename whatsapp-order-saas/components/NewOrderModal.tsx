@@ -7,6 +7,7 @@ import {
   createManualOrder,
   type ManualOrderInput,
 } from "@/lib/actions/orders";
+import { offlineDB } from "@/lib/utils";
 import Link from "next/link";
 
 interface LineItem {
@@ -143,10 +144,35 @@ export default function NewOrderModal({
       notes: notes.trim() || undefined,
     };
 
-    const result = await createManualOrder(input);
+    let result;
+    try {
+      result = await createManualOrder(input);
+    } catch (err) {
+      result = { error: 'offline' };
+    }
     setLoading(false);
 
-    if (result.error) { setError(result.error); return; }
+    if (result.error) {
+      // If offline, save to IndexedDB
+      if (result.error === 'offline' || !navigator.onLine) {
+        try {
+          await offlineDB.saveOrder({
+            ...input,
+            id: Date.now() + '-' + Math.random().toString(36).slice(2),
+            offline: true,
+            createdAt: new Date().toISOString(),
+          });
+          setStep("success");
+          router.refresh();
+          return;
+        } catch (e) {
+          setError("Could not save order offline.");
+          return;
+        }
+      }
+      setError(result.error);
+      return;
+    }
     setStep("success");
     router.refresh();
   }

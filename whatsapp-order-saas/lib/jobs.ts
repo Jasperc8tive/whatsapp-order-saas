@@ -86,10 +86,14 @@ export async function claimNextJob(queueName: string): Promise<JobRow | null> {
 
 export async function completeJob(jobId: string): Promise<void> {
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("job_queue")
     .update({ status: "done", updated_at: new Date().toISOString() })
     .eq("id", jobId);
+
+  if (error) {
+    console.error(`[jobs] completeJob failed for job ${jobId}:`, error.message);
+  }
 }
 
 export async function failJob(job: JobRow, errorMessage: string): Promise<void> {
@@ -111,7 +115,7 @@ export async function failJob(job: JobRow, errorMessage: string): Promise<void> 
   const nextStatus = attempt >= maxAttempts ? "dead" : "failed";
   const nextRunAt = new Date(Date.now() + backoffMs).toISOString();
 
-  await admin
+  const { error } = await admin
     .from("job_queue")
     .update({
       status: nextStatus,
@@ -120,4 +124,8 @@ export async function failJob(job: JobRow, errorMessage: string): Promise<void> 
       updated_at: new Date().toISOString(),
     })
     .eq("id", job.id);
+
+  if (error) {
+    console.error(`[jobs] failJob failed for job ${job.id}:`, error.message);
+  }
 }

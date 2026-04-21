@@ -77,7 +77,6 @@ jobs:
           node-version: '22'
       
       - name: Deploy to Vercel
-        working-directory: whatsapp-order-saas
         run: |
           npx vercel pull --yes --token=${{ secrets.VERCEL_TOKEN }}
           npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}

@@ -60,7 +60,7 @@ export async function PATCH(
 
     const role = isOwner ? "owner" : member?.role;
 
-    if (!isOwner && !member) {
+    if (!isOwner && (!member || !role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

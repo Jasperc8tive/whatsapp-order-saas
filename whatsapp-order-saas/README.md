@@ -1,3 +1,8 @@
+
+![Coverage](./coverage/badge.svg)
+<!-- Sentry badge example: replace with your project badge URL -->
+![Sentry](https://img.shields.io/badge/Sentry-enabled-brightgreen)
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

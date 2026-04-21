@@ -4,6 +4,7 @@ import { processInboundMessage } from "@/lib/actions/inbound";
 import { runAutomationForEvent } from "@/lib/automation";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { sendTextMessage } from "@/lib/whatsapp";
+import { NotificationJobPayload } from "@/lib/notificationQueue";
 
 export const dynamic = "force-dynamic";
 
@@ -103,11 +104,8 @@ function authorizeWorkerRequest(request: Request): {
   }
 
   if (!workerSecret && !cronSecret) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Neither WORKER_SECRET nor CRON_SECRET is configured.",
-    };
+    console.error("[worker] Neither WORKER_SECRET nor CRON_SECRET is configured.");
+    return { ok: false, status: 401, error: "Unauthorized" };
   }
 
   return { ok: false, status: 401, error: "Unauthorized" };
@@ -153,7 +151,45 @@ async function executeJob(queue: string, payload: Record<string, unknown>): Prom
     return;
   }
 
+  if (queue === "notification_outbound") {
+    await handleNotificationOutbound(payload);
+    return;
+  }
+
   throw new Error(`Unsupported queue: ${queue}`);
+
+
+async function handleNotificationOutbound(payload: Record<string, unknown>): Promise<void> {
+  // Type guard for NotificationJobPayload
+  function isNotificationJobPayload(obj: any): obj is NotificationJobPayload {
+    return (
+      typeof obj === "object" &&
+      obj !== null &&
+      typeof obj.type === "string" &&
+      typeof obj.recipient === "string" &&
+      typeof obj.channel === "string" &&
+      (obj.channel === "whatsapp" || obj.channel === "sms" || obj.channel === "email" || obj.channel === "inapp") &&
+      typeof obj.template === "string" &&
+      typeof obj.data === "object"
+    );
+  }
+
+  if (!isNotificationJobPayload(payload)) {
+    throw new Error("Invalid notification job payload");
+  }
+  const job = payload;
+  // WhatsApp only for now; extend for SMS/email/inapp
+  if (job.channel === "whatsapp") {
+    const to = job.recipient;
+    const message = typeof job.template === "string"
+      ? job.template
+      : JSON.stringify(job.template);
+    await sendTextMessage(to, message);
+    return;
+  }
+  // TODO: Add SMS, email, in-app notification support
+  throw new Error(`Unsupported notification channel: ${job.channel}`);
+}
 }
 
 async function notifyStaffDraft(payload: Record<string, unknown>): Promise<void> {

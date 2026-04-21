@@ -118,16 +118,29 @@ export async function initializeTransaction(
  * Used both in the webhook handler (double-check) and the verify-payment route.
  */
 export async function verifyTransaction(
-  reference: string
+  reference: string,
+  timeoutMs = 8000
 ): Promise<VerifyTransactionResponse> {
-  const res = await fetch(
-    `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
-    {
-      headers: { Authorization: `Bearer ${getSecret()}` },
-      // Disable Next.js data cache — payment state must always be live
-      cache: "no-store",
-    }
-  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${getSecret()}` },
+        // Disable Next.js data cache — payment state must always be live
+        cache: "no-store",
+        signal: controller.signal,
+      }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Paystack verify request failed: ${message}`);
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text();
