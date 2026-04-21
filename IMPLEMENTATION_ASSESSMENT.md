@@ -14,7 +14,7 @@ After reading every single file in the codebase, here is the honest picture.
 ### What Is Production-Ready Right Now ✅
 
 | Feature | Notes |
-|---|---|
+| --- | --- |
 | Email/password auth with email confirmation + PKCE callback | Correctly implemented |
 | Multi-tenant isolation via Supabase RLS | All 7 tables fully protected |
 | Storefront order submission with plan limit enforcement | `/order/[vendor]` path only |
@@ -33,32 +33,39 @@ This is a well-architected core. The backend is production-safe. What is missing
 These must be fixed **before** any new feature work. They create active data corruption.
 
 #### Bug #1 — Dual Storefront Routes (Data Integrity)
+
 Two storefront routes co-exist with **incompatible schemas**:
+
 - `/order/[vendor]` — uses `order_items` table, plan enforcement, Server Actions ✅
 - `/store/[slug]` — legacy client component, flat schema (`customer_name`, `product`, `quantity` on `orders` directly), no `order_items`, no plan enforcement ❌
 
 Orders from `/store/[slug]` appear as ₦0 forever on the kanban because they have no `order_items` rows. The DB trigger that calculates `total_amount` never fires.
 
 #### Bug #2 — Dual Kanban Implementations (Wrong Status Data)
+
 `KanbanBoard` uses `OrderStatus`: `pending | confirmed | processing | shipped | delivered | cancelled`  
 `OrderBoard` (on the main overview page) uses `KanbanStatus`: `new | paid | processing | shipped | delivered`
 
 An order dragged to "confirmed" on the orders page will never show in the "paid" column on the overview. The overview dashboard shows stale/incorrect order status data.
 
 #### Bug #3 — Settings Page Loads Mock Data, Not Real Data
+
 `app/dashboard/settings/page.tsx` initializes state with **hardcoded strings** (`"My Food Store"`, `"my-food-store"`). It never fetches the real vendor data on mount. Every time a vendor opens Settings and saves, they overwrite their real business name with mock values.
 
 Additionally, the page writes to an `api_token` column that does not exist in `schema.sql`.
 
 #### Bug #4 — Missing Password Reset Page (404 on Login)
+
 The LoginForm has a "Forgot password?" link → `/forgot-password`. This page does not exist. Users who forget their password get a 404, which looks like a broken product to paying customers.
 
 #### Bug #5 — NewOrderModal Bypasses order_items
+
 When a vendor manually adds an order from the dashboard, `NewOrderModal` inserts into the flat `orders` schema without creating `order_items` rows. Those orders show ₦0 total permanently and are invisible in the proper KanbanBoard.
 
 ---
 
 ### Schema / Type Drift ⚠️
+
 - `types/customer.ts` defines `total_orders`, `total_spent`, `last_order_at` — none of these columns exist in the actual `customers` table in the DB
 - `types/vendor.ts` exists but is unused everywhere — app reads vendor data with loose inline types
 - Settings page references `api_token` — not in schema
@@ -67,6 +74,7 @@ When a vendor manually adds an order from the dashboard, `NewOrderModal` inserts
 ---
 
 ## Part 2 — Phase 1: Foundation Repairs (Week 1)
+
 *These make the app correct. Nothing else should be built until these are done.*
 
 ### 1.1 — Fix the Dual Storefront Problem
@@ -113,6 +121,7 @@ app/dashboard/settings/
 ```
 
 Add `api_token` properly to the DB schema OR remove the field from the UI:
+
 ```sql
 -- supabase/migrations/003_settings_fields.sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS api_token text UNIQUE;
@@ -124,6 +133,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone text DEFAULT 'Africa/Lagos';
 ### 1.4 — Add Password Reset Pages
 
 Two new pages:
+
 - `app/(auth)/forgot-password/page.tsx` — email input, calls `supabase.auth.resetPasswordForEmail()`
 - `app/(auth)/reset-password/page.tsx` — new password input, calls `supabase.auth.updateUser({ password })`
 
@@ -134,6 +144,7 @@ Set `emailRedirectTo` in the Supabase dashboard to point to `/auth/callback?next
 ### 1.5 — Fix NewOrderModal to Use order_items
 
 The modal must:
+
 1. Accept multiple line items (product name + qty + unit price fields)
 2. Insert rows into `order_items`, not the flat `orders` schema
 3. Call `checkPlanLimit` before inserting
@@ -169,11 +180,13 @@ Then update the customers page to query `customer_stats` instead of `customers`.
 ---
 
 ## Part 3 — Phase 2: Core Product Completion (Weeks 2–3)
+
 *Features vendors expect on Day 1 of using any SaaS dashboard.*
 
 ### 2.1 — Product Catalogue (Biggest Quick Win)
 
 **The Problem:** Customers type free-text product names on the storefront. This causes:
+
 - Spelling errors (same product ordered 10 different ways in analytics)
 - No price visibility for customers before they order
 - Vendors cannot see what's actually selling
@@ -181,7 +194,8 @@ Then update the customers page to query `customer_stats` instead of `customers`.
 The `products` table already exists fully in `schema.sql` — it just has zero UI.
 
 **Build:**
-```
+
+```text
 app/dashboard/products/
   page.tsx              ← Product list grid with "Add Product" button
   ProductForm.tsx       ← Client form: name, description, price, image, active toggle
@@ -194,6 +208,7 @@ components/
 ```
 
 **DB additions needed:**
+
 ```sql
 ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_count integer;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS category text;
@@ -212,6 +227,7 @@ Update `components/storefront/OrderForm.tsx` to load the vendor's active product
 Vendors cannot drill into an individual order. There is no `/dashboard/orders/[id]`.
 
 **Build:**
+
 ```
 app/dashboard/orders/[id]/
   page.tsx              ← Server Component: full order view
@@ -223,6 +239,7 @@ components/
 ```
 
 **Features:**
+
 - All order line items with names, quantities, and unit prices
 - Customer info card with a direct `wa.me` deep link to chat on WhatsApp
 - Status changer (same `updateOrderStatus` action, faster than finding the card on the kanban)
@@ -238,6 +255,7 @@ components/
 The `deliveries` table is complete in the schema but has zero UI.
 
 Add to the Order Detail page:
+
 - Courier name field
 - Tracking ID field
 - Estimated delivery date picker
@@ -268,6 +286,7 @@ Sections to include:
 The billing page has plan cards with disabled "Upgrade" buttons. This prevents you from earning revenue from your own product. Use **Paystack Recurring Billing** (Subscriptions API).
 
 **Steps:**
+
 1. Create two plans in the Paystack dashboard (Growth ₦9,900/mo, Pro ₦24,900/mo)
 2. Copy the Paystack `plan_code` for each
 3. Add to DB:
@@ -280,9 +299,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status  text DEFAULT 'in
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at  timestamptz;
 ```
 
-4. Build `POST /api/billing/subscribe` — calls Paystack `POST /subscription` API, stores codes
-5. Build `POST /api/billing/webhook` — handles `subscription.create`, `subscription.disable`, `invoice.payment_failed` — updates `users.plan` and `subscription_status`
-6. Enable the "Upgrade" buttons in the billing page
+1. Build `POST /api/billing/subscribe` — calls Paystack `POST /subscription` API, stores codes
+2. Build `POST /api/billing/webhook` — handles `subscription.create`, `subscription.disable`, `invoice.payment_failed` — updates `users.plan` and `subscription_status`
+3. Enable the "Upgrade" buttons in the billing page
 
 ---
 
@@ -332,6 +351,7 @@ useEffect(() => {
 ---
 
 ## Part 4 — Phase 3: CRM & Growth Engine (Weeks 4–6)
+
 *What separates a dashboard from a real business operating system.*
 
 ### 3.1 — Customer Segmentation
@@ -347,6 +367,7 @@ Lapsed     → Last order was 60+ days ago
 ```
 
 **DB (Postgres function — no schema change needed):**
+
 ```sql
 CREATE OR REPLACE FUNCTION classify_customer(
   p_total_orders int,
@@ -373,6 +394,7 @@ This is the feature Nigerian vendors will pay ₦24,900/month for. The ability t
 entire customer base with a new menu, a promo, or a restock announcement — directly on WhatsApp.
 
 **DB tables needed:**
+
 ```sql
 CREATE TABLE broadcasts (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -402,6 +424,7 @@ CREATE TABLE broadcast_receipts (
 ```
 
 **Pages to build:**
+
 ```
 app/dashboard/broadcasts/
   page.tsx          ← Campaign list: name, status, sent count, date sent
@@ -418,6 +441,7 @@ app/api/broadcast/
 **Rate limiting note:** Meta WhatsApp allows 1,000 messages/day on unverified accounts and progressively higher limits after Business Verification. The sending route must batch messages and throttle to avoid hitting limits. Use a queue approach with Supabase `broadcast_receipts` rows as the queue.
 
 **Variable substitution in messages:**
+
 ```
 "Hi {{customer_name}}! 🎉 Our new Pepper Soup is now available for ₦3,500. 
  Order now: {{store_link}}"
@@ -431,11 +455,13 @@ Right now WhatsApp is one-way — you send notifications, you never hear back un
 call or text manually. To become a full Business OS, you must handle replies.
 
 **Meta Webhook setup:**
+
 1. Add URL in Meta Business dashboard: `POST /api/whatsapp/webhook`
 2. Handle the `GET` challenge verification (Meta sends `hub.challenge` parameter)
 3. Parse all `messages` events from the POST payload
 
 **DB table:**
+
 ```sql
 CREATE TABLE conversations (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -452,6 +478,7 @@ CREATE TABLE conversations (
 ```
 
 **Pages to build:**
+
 ```
 app/dashboard/inbox/
   page.tsx          ← Conversation list (grouped by phone number, sorted by last message)
@@ -468,6 +495,7 @@ Deploy an AI assistant that automatically handles customer WhatsApp messages out
 business hours or while the vendor is busy.
 
 **Example interaction:**
+
 ```
 Customer (2:30 AM): "How much is your Sunday rice?"
 AI Agent: "Hi! Our Sunday Special Rice is ₦2,500 per portion, served with stew, 
@@ -476,6 +504,7 @@ AI Agent: "Hi! Our Sunday Special Rice is ₦2,500 per portion, served with stew
 ```
 
 **How it works:**
+
 1. Inbound message arrives at `/api/whatsapp/webhook`
 2. Check if vendor has `ai_agent_enabled = true` AND is outside `business_hours`
 3. Build a system prompt: "You are the AI assistant for [business name]. Products: [list]. Accept orders at: [link]."
@@ -484,6 +513,7 @@ AI Agent: "Hi! Our Sunday Special Rice is ₦2,500 per portion, served with stew
 6. Log to `conversations` table
 
 **DB additions:**
+
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_agent_enabled   boolean DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_system_prompt   text;
@@ -496,6 +526,7 @@ is ~500 tokens. 1,000 conversations/month = $0.075. Even at 10,000 conversations
 $1. This is a Pro plan exclusive feature — pure margin.
 
 **AI Settings UI:**
+
 ```
 app/dashboard/settings/
   ai/page.tsx       ← Toggle AI agent on/off + customise system prompt + set business hours
@@ -559,6 +590,7 @@ CREATE TABLE payment_links (
 ### 4.3 — Invoice & Receipt Generation
 
 After an order is paid, generate a PDF receipt that can be:
+
 - Sent to the customer via WhatsApp message (as a document)
 - Downloaded from the Order Detail page
 
@@ -594,6 +626,7 @@ CREATE TABLE staff (
 ```
 
 **Roles:**
+
 - `admin` — full access including billing
 - `manager` — orders, customers, products, broadcasts
 - `viewer` — read-only order view, no customer data
@@ -614,6 +647,7 @@ npx @sentry/wizard@latest -i nextjs
 ```
 
 Add to every API route:
+
 ```typescript
 import * as Sentry from '@sentry/nextjs';
 // In the catch block:
@@ -664,6 +698,7 @@ npm install resend
 ```
 
 Email triggers to add:
+
 - Welcome email on signup (with getting-started guide)
 - Password reset emails (instead of relying solely on Supabase's default)
 - Order confirmation (backup if WhatsApp fails)
@@ -711,6 +746,7 @@ export default function Loading() {
 No vendor will sign up based on this. You need a real marketing page.
 
 **Sections:**
+
 1. **Hero** — "Manage all your WhatsApp orders in one dashboard" + CTA to signup
 2. **Problem** — "You're losing orders in WhatsApp chat chaos" — pain agitation
 3. **How it works** — 3 steps: Share your link → Customer orders → You manage it
@@ -745,6 +781,7 @@ business name and logo. The existing `generateMetadata` in `/order/[vendor]/page
 partially implemented but missing OpenGraph image.
 
 Extend it to:
+
 ```typescript
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // Fetch vendor as before...
@@ -874,4 +911,3 @@ The bones are strong. Now it needs the flesh.
 ---
 
 *Document compiled from a line-by-line audit of all 36 source files in the project.*
-
