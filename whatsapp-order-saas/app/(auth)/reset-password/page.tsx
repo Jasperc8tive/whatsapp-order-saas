@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { updatePassword, type AuthState } from "@/lib/auth";
 
 function SubmitButton() {
@@ -27,7 +28,7 @@ function SubmitButton() {
 }
 
 export default function ResetPasswordPage() {
-  const [state, formAction] = useFormState<AuthState, FormData>(updatePassword, null);
+  const [state, formAction] = useActionState<AuthState, FormData>(updatePassword, null);
 
   return (
     <>

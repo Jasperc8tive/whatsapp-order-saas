@@ -11,6 +11,12 @@ on:
       - 'whatsapp-order-saas/**/*.test.ts'
       - 'whatsapp-order-saas/**/*.test.tsx'
       - 'whatsapp-order-saas/jest.config.js'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'whatsapp-order-saas/**/*.test.ts'
+      - 'whatsapp-order-saas/**/*.test.tsx'
+      - 'whatsapp-order-saas/jest.config.js'
 
 env:
   NODE_VERSION: '20'

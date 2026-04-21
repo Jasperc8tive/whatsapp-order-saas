@@ -1,0 +1,76 @@
+"use client";
+
+import { useState } from "react";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import EditCustomerModal from "@/components/EditCustomerModal";
+import DeleteCustomerButton from "@/components/DeleteCustomerButton";
+import { CustomerRow } from "@/components/BulkActionsBar";
+
+interface CustomersTableProps {
+  customers: CustomerRow[];
+}
+
+export default function CustomersTable({ customers }: CustomersTableProps) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  function toggle(id: string) {
+    setSelected((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+  function toggleAll() {
+    if (selected.length === customers.length) setSelected([]);
+    else setSelected(customers.map(c => c.id));
+  }
+  function clearSelection() {
+    setSelected([]);
+  }
+
+  return (
+    <>
+      {selected.length > 0 && (
+        <BulkActionsBar selectedIds={selected} onClear={clearSelection} customers={customers} />
+      )}
+      <div className="overflow-x-auto w-full">
+        <table className="min-w-full bg-white rounded-xl border border-gray-200 text-xs sm:text-sm">
+          <thead>
+            <tr>
+              <th className="px-2 py-2">
+                <input
+                  type="checkbox"
+                  checked={selected.length === customers.length && customers.length > 0}
+                  onChange={toggleAll}
+                  aria-label="Select all"
+                />
+              </th>
+              <th className="px-2 sm:px-4 py-2 text-left font-semibold text-gray-500">Name</th>
+              <th className="px-2 sm:px-4 py-2 text-left font-semibold text-gray-500">Phone</th>
+              <th className="px-2 sm:px-4 py-2 text-left font-semibold text-gray-500">Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customers.map((customer) => (
+              <tr key={customer.id}>
+                <td className="px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(customer.id)}
+                    onChange={() => toggle(customer.id)}
+                    aria-label={`Select ${customer.name}`}
+                  />
+                </td>
+                <td className="px-2 sm:px-4 py-2 text-gray-800 flex flex-col sm:flex-row sm:items-center gap-1">
+                  <span>{customer.name}</span>
+                  <span className="flex gap-1">
+                    <EditCustomerModal customer={customer} />
+                    <DeleteCustomerButton customerId={customer.id} />
+                  </span>
+                </td>
+                <td className="px-2 sm:px-4 py-2 text-gray-800">{customer.phone}</td>
+                <td className="px-2 sm:px-4 py-2 text-gray-500">{new Date(customer.created_at).toLocaleDateString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}

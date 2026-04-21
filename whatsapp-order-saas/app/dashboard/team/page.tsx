@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { listTeamMembers, listInvitations } from "@/lib/actions/team";
 import TeamPageClient from "./TeamPageClient";
 
-export const metadata = { title: "Team — OrderFlow" };
+export const metadata = { title: "Team — WhatsOrder" };
 
 export default async function TeamPage() {
   const supabase = await createServerSupabaseClient();

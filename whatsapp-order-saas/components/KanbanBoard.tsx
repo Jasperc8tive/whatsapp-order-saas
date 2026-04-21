@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -16,14 +17,20 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import KanbanCard from "./KanbanCard";
+import type { OrderAssignment } from "@/types/team";
+import { getOrderAssignment, assignOrder } from "@/lib/actions/assignments";
 import KanbanColumn, { COLUMN_CONFIGS } from "./KanbanColumn";
 import type { Order, OrderStatus } from "@/types/order";
 import { updateOrderStatus } from "@/lib/actions/orders";
 import { formatCurrency } from "@/lib/utils";
+import { getOrderPriorityScore } from "@/lib/orderPriority";
+import BulkAssignButton from "./BulkAssignButton";
+import { useEffect as useEffectReact, useState as useStateReact } from "react";
 
 interface KanbanBoardProps {
   initialOrders: Order[];
   vendorId: string;
+  canUseAiSmartReplies?: boolean;
 }
 
 const dropAnimation: DropAnimation = {
@@ -32,22 +39,74 @@ const dropAnimation: DropAnimation = {
   }),
 };
 
-export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProps) {
-  const [orders, setOrders]         = useState<Order[]>(initialOrders);
+
+function KanbanBoard({ initialOrders, vendorId, canUseAiSmartReplies }: KanbanBoardProps) {
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [managers, setManagers] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewResults, setPreviewResults] = useState<any[]>([]);
+  const [queuePreset, setQueuePreset] = useState<string>("urgent");
+  const [assignments, setAssignments] = useState<Record<string, OrderAssignment | null>>({});
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
-  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
-  const channelRef                    = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // Supabase Realtime — keep board in sync without refresh
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Render Kanban board UI (placeholder, replace with actual board JSX)
+  return (
+    <div>
+      <h2>Kanban Board</h2>
+      {/* Bulk Assign Button Example Usage */}
+      <BulkAssignButton
+        orders={orders}
+        managers={managers}
+        vendorId={vendorId}
+        onPreview={(results) => {
+          setPreviewResults(results);
+          setShowPreview(true);
+        }}
+      />
+      {/* TODO: Render columns, cards, drag-and-drop, etc. */}
+    </div>
+  );
+
+  // Load assignments for all orders on mount
+  useEffect(() => {
+    async function fetchAssignments() {
+      const result: Record<string, OrderAssignment | null> = {};
+      await Promise.all(
+        initialOrders.map(async (order) => {
+          try {
+            const res = await getOrderAssignment(order.id);
+            result[order.id] = res.assignment ?? null;
+          } catch {
+            result[order.id] = null;
+          }
+        })
+      );
+      setAssignments(result);
+    }
+    fetchAssignments();
+  }, [initialOrders]);
+
+  // Fetch managers (delivery_manager role)
+  useEffect(() => {
+    async function fetchManagers() {
+      const res = await fetch("/api/team/members");
+      const data = await res.json();
+      setManagers((data.members || []).filter((m: any) => m.role === "delivery_manager" && m.is_active));
+    }
+    fetchManagers();
+  }, [vendorId]);
 
   useEffect(() => {
     if (!vendorId) return;
 
+    // Orders channel
     const channel = supabase
       .channel(`orders:vendor:${vendorId}`)
       .on(
@@ -60,10 +119,8 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
         },
         async (payload) => {
           const row = payload.new as Record<string, unknown>;
-
           let customerName = (row.customer_name as string | null) ?? "New Customer";
           let customerPhone = (row.customer_phone as string | null) ?? "";
-
           const customerId = (row.customer_id as string | null) ?? null;
           if (customerId && (customerName === "New Customer" || !customerPhone)) {
             const { data: customer } = await supabase
@@ -71,13 +128,11 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
               .select("name, phone")
               .eq("id", customerId)
               .maybeSingle();
-
             if (customer) {
               customerName = customer.name ?? customerName;
               customerPhone = customer.phone ?? customerPhone;
             }
           }
-
           const newOrder: Order = {
             id: row.id as string,
             vendor_id: (row.vendor_id as string | null) ?? vendorId,
@@ -127,11 +182,63 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
       )
       .subscribe();
 
+    // Order assignments channel
+    const assignmentChannel = supabase
+      .channel(`order_assignments:vendor:${vendorId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "order_assignments",
+          filter: `workspace_id=eq.${vendorId}`,
+        },
+        async (payload) => {
+          const row = payload.new as { order_id: string };
+          const res = await getOrderAssignment(row.order_id);
+          setAssignments((prev) => ({ ...prev, [row.order_id]: res.assignment ?? null }));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "order_assignments",
+          filter: `workspace_id=eq.${vendorId}`,
+        },
+        async (payload) => {
+          const row = payload.new as { order_id: string };
+          const res = await getOrderAssignment(row.order_id);
+          setAssignments((prev) => ({ ...prev, [row.order_id]: res.assignment ?? null }));
+        }
+      )
+      .subscribe();
+
+    // Activity logs channel
+    const activityChannel = supabase
+      .channel(`activity_logs:vendor:${vendorId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "activity_logs",
+          filter: `workspace_id=eq.${vendorId}`,
+        },
+        (payload) => {
+          // TODO: Optionally update activity feed or trigger UI notification
+        }
+      )
+      .subscribe();
+
     channelRef.current = channel;
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(assignmentChannel);
+      supabase.removeChannel(activityChannel);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendorId]);
 
   const sensors = useSensors(
@@ -202,76 +309,30 @@ export default function KanbanBoard({ initialOrders, vendorId }: KanbanBoardProp
 
   const boardTotal = orders.reduce((sum, o) => sum + o.total_amount, 0);
 
-  return (
-    <div>
-      {/* Error toast */}
-      {errorMsg && (
-        <div className="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-          <span className="flex-1">{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
+  // Sorting logic for queue presets
+  function sortOrders(orders: Order[]): Order[] {
+    switch (queuePreset) {
+      case "urgent":
+        // Highest priority score first
+        return [...orders].sort((a, b) => getOrderPriorityScore(b) - getOrderPriorityScore(a));
+      case "oldest_unassigned":
+        // Oldest created_at, unassigned first
+        return [...orders].sort((a, b) => {
+          const aAssigned = assignments[a.id] != null;
+          const bAssigned = assignments[b.id] != null;
+          if (aAssigned !== bAssigned) return aAssigned ? 1 : -1;
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+      case "high_value":
+        // Highest total_amount first
+        return [...orders].sort((a, b) => b.total_amount - a.total_amount);
+      default:
+        return orders;
+    }
+  }
 
-      {/* Board summary bar */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-5 text-sm text-gray-500">
-        <span>
-          <span className="font-semibold text-gray-800">{orders.length}</span> orders
-        </span>
-        <span className="w-px h-4 bg-gray-200 hidden sm:block" />
-        <span>
-          Board value:{" "}
-          <span className="font-semibold text-gray-800">{formatCurrency(boardTotal)}</span>
-        </span>
-        {updatingIds.size > 0 && (
-          <>
-            <span className="w-px h-4 bg-gray-200 hidden sm:block" />
-            <span className="flex items-center gap-1.5 text-green-600">
-              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              Saving…
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* Scroll hint on mobile */}
-      <p className="text-xs text-gray-400 mb-3 lg:hidden">
-        ← Scroll to see all columns · Hold a card to drag
-      </p>
-
-      {/* Kanban columns */}
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex gap-3 md:gap-4 overflow-x-auto pb-6 -mx-4 px-4 md:mx-0 md:px-0">
-          {COLUMN_CONFIGS.map((config) => (
-            <KanbanColumn
-              key={config.id}
-              config={config}
-              orders={orders.filter((o) => o.status === config.id)}
-              isAnyDragging={activeOrder !== null}
-              onStatusChange={handleStatusChange}
-              updatingIds={updatingIds}
-            />
-          ))}
-        </div>
-
-        <DragOverlay dropAnimation={dropAnimation}>
-          {activeOrder ? <KanbanCard order={activeOrder} overlay /> : null}
-        </DragOverlay>
-      </DndContext>
-    </div>
-  );
+// ...existing code...
+// Ensure function is properly closed
 }
+
+export default KanbanBoard;

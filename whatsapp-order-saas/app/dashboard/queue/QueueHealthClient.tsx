@@ -129,11 +129,11 @@ export default function QueueHealthClient({ initialData, error }: Props) {
 
   // Keep local controls in sync after URL navigation/refetch.
   useEffect(() => {
-    setSearchInput(initialData.applied.search);
+    setSearchInput(initialData.applied.search); // eslint-disable-line react-hooks/set-state-in-effect
   }, [initialData.applied.search]);
 
   useEffect(() => {
-    setPageInput(String(initialData.pagination.page));
+    setPageInput(String(initialData.pagination.page)); // eslint-disable-line react-hooks/set-state-in-effect
   }, [initialData.pagination.page]);
 
   // Debounced live search: update URL after typing pause.

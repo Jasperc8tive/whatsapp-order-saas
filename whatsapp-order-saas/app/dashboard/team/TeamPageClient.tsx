@@ -29,6 +29,9 @@ export default function TeamPageClient({
   const [inviteRole, setInviteRole]     = useState<WorkspaceRole>("staff");
   const [formError, setFormError]       = useState<string | null>(null);
   const [formSuccess, setFormSuccess]   = useState<string | null>(null);
+  const [actionError, setActionError]   = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [isPending, startTransition]    = useTransition();
 
   // ─── Invite ──────────────────────────────────────────────────────────────
@@ -36,6 +39,8 @@ export default function TeamPageClient({
     e.preventDefault();
     setFormError(null);
     setFormSuccess(null);
+    setActionError(null);
+    setActionSuccess(null);
     const fd = new FormData();
     fd.set("email", inviteEmail);
     fd.set("role", inviteRole);
@@ -56,8 +61,11 @@ export default function TeamPageClient({
   function handleRevoke(invitationId: string) {
     startTransition(async () => {
       const result = await revokeInvitation(invitationId);
-      if (!result.error) {
+      if (result.error) {
+        setActionError(result.error);
+      } else {
         setInvitations((prev) => prev.filter((i) => i.id !== invitationId));
+        setActionSuccess("Invitation revoked.");
       }
     });
   }
@@ -65,26 +73,32 @@ export default function TeamPageClient({
   // ─── Remove member ───────────────────────────────────────────────────────
   function handleRemove(memberId: string) {
     if (!confirm("Remove this team member? They will lose access to the dashboard.")) return;
+    setActionError(null);
+    setActionSuccess(null);
     startTransition(async () => {
       const result = await removeMember(memberId);
       if (result.error) {
-        alert(result.error);
+        setActionError(result.error);
       } else {
         setMembers((prev) => prev.filter((m) => m.id !== memberId));
+        setActionSuccess("Team member removed.");
       }
     });
   }
 
   // ─── Update role ─────────────────────────────────────────────────────────
   function handleRoleChange(memberId: string, newRole: WorkspaceRole) {
+    setActionError(null);
+    setActionSuccess(null);
     startTransition(async () => {
       const result = await updateMemberRole(memberId, newRole);
       if (result.error) {
-        alert(result.error);
+        setActionError(result.error);
       } else {
         setMembers((prev) =>
           prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
         );
+        setActionSuccess("Team role updated.");
       }
     });
   }
@@ -98,6 +112,17 @@ export default function TeamPageClient({
           Manage who has access to your workspace and what they can do.
         </p>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+      {actionSuccess && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {actionSuccess}
+        </div>
+      )}
 
       {/* ── Invite form (owner only) ── */}
       {isOwner && (
@@ -218,30 +243,51 @@ export default function TeamPageClient({
             Pending invitations <span className="text-gray-400 font-normal">({invitations.length})</span>
           </h2>
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm divide-y divide-gray-100">
-            {invitations.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between px-5 py-4 gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{inv.email}</p>
-                  <p className="text-xs text-gray-400">
-                    Expires {new Date(inv.expires_at).toLocaleDateString("en-NG", { dateStyle: "medium" })}
-                  </p>
+            {invitations.map((inv) => {
+              const acceptLink = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/team/accept?token=${inv.token}`;
+              return (
+                <div key={inv.id} className="flex flex-col gap-3 px-5 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{inv.email}</p>
+                      <p className="text-xs text-gray-400">
+                        Expires {new Date(inv.expires_at).toLocaleDateString("en-NG", { dateStyle: "medium" })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[inv.role]}`}
+                      >
+                        {ROLE_LABELS[inv.role]}
+                      </span>
+                      <button
+                        onClick={() => handleRevoke(inv.id)}
+                        disabled={isPending}
+                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Acceptance link */}
+                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+                    <code className="text-xs text-gray-600 flex-1 overflow-x-auto break-all font-mono">{acceptLink}</code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(acceptLink);
+                        setCopiedInviteId(inv.id);
+                        setTimeout(() => setCopiedInviteId((current) => (current === inv.id ? null : current)), 2000);
+                      }}
+                      className="flex-shrink-0 px-2 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                      title="Copy link"
+                    >
+                      {copiedInviteId === inv.id ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[inv.role]}`}
-                  >
-                    {ROLE_LABELS[inv.role]}
-                  </span>
-                  <button
-                    onClick={() => handleRevoke(inv.id)}
-                    disabled={isPending}
-                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
-                  >
-                    Revoke
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

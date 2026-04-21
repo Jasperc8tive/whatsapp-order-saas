@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const metadataUserId = metadata.user_id as string | undefined;
     const targetPlanRaw = metadata.target_plan as string | undefined;
 
-    if (source !== "orderflow-billing-upgrade") {
+    if (source !== "whatsorder-billing-upgrade") {
       return NextResponse.redirect(
         new URL(`${BILLING_PATH}?error=${encodeURIComponent("This payment is not a billing upgrade transaction.")}`, request.url)
       );

@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { logActivity } from "@/lib/activity";
 import { enqueueJob } from "@/lib/jobs";
+import { getWorkspacePlan, hasAiInboxCopilotAccess } from "@/lib/plans";
+import { notifyDraftRejected } from "@/lib/whatsapp";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,8 @@ export async function listDrafts(
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   let query = admin
     .from("order_drafts")
@@ -91,6 +95,8 @@ export async function getDraft(
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   const { data, error } = await admin
     .from("order_drafts")
@@ -134,6 +140,8 @@ export async function approveDraft(
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
 
   const { data: draft, error: fetchErr } = await admin
     .from("order_drafts")
@@ -255,6 +263,18 @@ export async function rejectDraft(
   const admin = createAdminClient();
   const workspaceId = await resolveWorkspaceId(admin, user.id);
   if (!workspaceId) return { error: "Workspace not found." };
+  const access = await assertAiAccess(admin, workspaceId);
+  if (!access.ok) return { error: access.error };
+
+  const { data: draft, error: draftError } = await admin
+    .from("order_drafts")
+    .select("customer_phone, customer_name")
+    .eq("id", draftId)
+    .eq("workspace_id", workspaceId)
+    .eq("status", "pending_review")
+    .single();
+
+  if (draftError || !draft) return { error: "Draft not found or already processed." };
 
   const { error } = await admin
     .from("order_drafts")
@@ -269,6 +289,19 @@ export async function rejectDraft(
     .eq("status", "pending_review");
 
   if (error) return { error: error.message };
+
+  const { data: workspace } = await admin
+    .from("users")
+    .select("business_name")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  void notifyDraftRejected({
+    customerName: (draft.customer_name as string | null) ?? draft.customer_phone,
+    customerPhone: draft.customer_phone as string,
+    vendorName: (workspace?.business_name as string | undefined) ?? "our team",
+    reason,
+  });
 
   await logActivity({
     workspaceId,
@@ -303,4 +336,16 @@ async function resolveWorkspaceId(
     .eq("is_active", true)
     .maybeSingle();
   return (member?.workspace_id as string) ?? null;
+}
+
+async function assertAiAccess(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const currentPlanId = await getWorkspacePlan(admin, workspaceId);
+  if (!hasAiInboxCopilotAccess(currentPlanId)) {
+    return { ok: false, error: "AI Order Drafts are available on the Pro plan only." };
+  }
+
+  return { ok: true };
 }

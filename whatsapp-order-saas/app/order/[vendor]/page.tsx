@@ -5,14 +5,16 @@ import OrderForm from "@/components/storefront/OrderForm";
 import { DEMO_PRODUCTS, DEMO_VENDOR, DEMO_VENDOR_SLUG } from "@/lib/demoStore";
 
 interface Props {
-  params: { vendor: string };
+  params: Promise<{ vendor: string }>;
 }
 
 // ── Dynamic metadata ─────────────────────────────────────────────────────────
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  if (params.vendor === DEMO_VENDOR_SLUG) {
+  const { vendor } = await params;
+
+  if (vendor === DEMO_VENDOR_SLUG) {
     return {
-      title: `Order from ${DEMO_VENDOR.business_name} — OrderFlow`,
+      title: `Order from ${DEMO_VENDOR.business_name} — WhatsOrder`,
     };
   }
 
@@ -20,18 +22,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { data } = await supabase
     .from("users")
     .select("business_name")
-    .eq("slug", params.vendor)
+    .eq("slug", vendor)
     .single();
 
   return {
     title: data?.business_name
-      ? `Order from ${data.business_name} — OrderFlow`
-      : "Place an order — OrderFlow",
+      ? `Order from ${data.business_name} — WhatsOrder`
+      : "Place an order — WhatsOrder",
   };
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default async function VendorOrderPage({ params }: Props) {
+  const { vendor: vendorSlug } = await params;
   const supabase = await createServerSupabaseClient();
 
   let vendor: {
@@ -49,14 +52,14 @@ export default async function VendorOrderPage({ params }: Props) {
     image_url?: string | null;
   }> = [];
 
-  if (params.vendor === DEMO_VENDOR_SLUG) {
+  if (vendorSlug === DEMO_VENDOR_SLUG) {
     vendor = DEMO_VENDOR;
     products = DEMO_PRODUCTS;
   } else {
     const { data: dbVendor } = await supabase
       .from("users")
       .select("id, business_name, slug, phone")
-      .eq("slug", params.vendor)
+      .eq("slug", vendorSlug)
       .single();
 
     vendor = dbVendor;
@@ -115,7 +118,7 @@ export default async function VendorOrderPage({ params }: Props) {
 
         {/* Vendor header card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-4 text-center">
-          {params.vendor === DEMO_VENDOR_SLUG && (
+          {vendorSlug === DEMO_VENDOR_SLUG && (
             <div className="mb-3">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -151,7 +154,7 @@ export default async function VendorOrderPage({ params }: Props) {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-5">
-          Powered by <span className="font-semibold text-gray-500">OrderFlow</span>
+          Powered by <span className="font-semibold text-gray-500">WhatsOrder</span>
         </p>
       </div>
     </div>

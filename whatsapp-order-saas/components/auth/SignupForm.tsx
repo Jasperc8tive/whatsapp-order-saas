@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { signUp, type AuthState } from "@/lib/auth";
 
@@ -28,7 +29,7 @@ function SubmitButton() {
 }
 
 export default function SignupForm() {
-  const [state, formAction] = useFormState<AuthState, FormData>(signUp, null);
+  const [state, formAction] = useActionState<AuthState, FormData>(signUp, null);
 
   // Show success message (email confirmation required)
   if (state?.message) {
