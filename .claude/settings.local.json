@@ -5,7 +5,9 @@
       "Bash(npm install @supabase/supabase-js @supabase/ssr)",
       "Bash(npm run build)",
       "Bash(npm install @dnd-kit/core @dnd-kit/utilities)",
-      "Bash(cat c:/Users/Mayowa/Desktop/agentic-ai-startup/whatsapp-order-saas/app/order/[vendor]/page.tsx)"
+      "Bash(cat c:/Users/Mayowa/Desktop/agentic-ai-startup/whatsapp-order-saas/app/order/[vendor]/page.tsx)",
+      "Bash(grep -E \"\\\\.\\(ts|js|json\\)$|next|tsconfig|jest\")",
+      "Bash(xargs ls:*)"
     ]
   }
 }
