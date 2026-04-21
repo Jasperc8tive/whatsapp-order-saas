@@ -1,13 +1,87 @@
-# Workspace-level ignores
+```
+# Dependencies
 node_modules/
-**/node_modules/
 
-# Local tooling state
-.claude/settings.local.json
-.vscode/
-**/supabase/.temp/
+# Environment variables
+.env
+.env.local
+.env.*
 
 # Logs
+*.log
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Build outputs
+dist/
+build/
+target/
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# IDE specific
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Package manager caches
+.npm/
+.yarn/
+.bower-cache/
+.bower-registry/
+.bower-tmp/
+.jspm/
+.web-pack/
+
+# Testing
+.mypy_cache/
+.pytest_cache/
+.nyc_output/
+coverage/
+
+# Runtime
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Supabase specific
+supabase/.temp/
+supabase/cache/
+supabase/logs/
+```
