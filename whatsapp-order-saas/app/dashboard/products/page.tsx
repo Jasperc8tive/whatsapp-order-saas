@@ -1,11 +1,17 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import ProductsClient from "./ProductsClient";
+import { OfflineProductsPanel } from "@/components/OfflineProductsPanel";
 
-export default async function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ highlight?: string }>;
+}) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  const resolvedSearchParams = await searchParams;
 
   let { data: products, error } = await supabase
     .from("products")
@@ -47,8 +53,17 @@ export default async function ProductsPage() {
       0
     ) as number),
     is_active: Boolean((p.is_active ?? true) as boolean),
+    image_url: (p.image_url as string | null | undefined) ?? undefined,
     created_at: (p.created_at as string) ?? new Date(0).toISOString(),
   }));
 
-  return <ProductsClient initialProducts={normalizedProducts} />;
+  return (
+    <>
+      <OfflineProductsPanel />
+      <ProductsClient
+        initialProducts={normalizedProducts}
+        highlightProductId={resolvedSearchParams?.highlight}
+      />
+    </>
+  );
 }

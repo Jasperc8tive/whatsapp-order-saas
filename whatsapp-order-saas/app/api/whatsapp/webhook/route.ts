@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { enqueueJob } from "@/lib/jobs";
+import { requireEnvValue } from "@/lib/env";
 
 /**
  * GET /api/whatsapp/webhook
@@ -19,9 +20,14 @@ export async function GET(request: Request) {
   const token     = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (!verifyToken) {
-    console.error("[whatsapp/webhook] WHATSAPP_WEBHOOK_VERIFY_TOKEN not set.");
+  let verifyToken: string;
+  try {
+    verifyToken = requireEnvValue(
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+      "WHATSAPP_WEBHOOK_VERIFY_TOKEN"
+    );
+  } catch (err) {
+    console.error("[whatsapp/webhook]", err instanceof Error ? err.message : String(err));
     return new Response("Server misconfiguration.", { status: 500 });
   }
 
@@ -50,9 +56,14 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
 
   // 2. Verify HMAC-SHA256 signature
-  const appSecret = process.env.WHATSAPP_APP_SECRET;
-  if (!appSecret) {
-    console.error("[whatsapp/webhook] WHATSAPP_APP_SECRET not set.");
+  let appSecret: string;
+  try {
+    appSecret = requireEnvValue(
+      process.env.WHATSAPP_APP_SECRET,
+      "WHATSAPP_APP_SECRET"
+    );
+  } catch (err) {
+    console.error("[whatsapp/webhook]", err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: "Server misconfiguration." }, { status: 500 });
   }
 
@@ -118,40 +129,46 @@ async function handleWebhookPayload(payload: MetaWebhookPayload) {
 
       for (const message of value?.messages ?? []) {
         if (message.type !== "text") continue;
-        const messageText = message.text?.body ?? "";
-        if (!messageText.trim()) continue;
+        const messageText = (message.text?.body ?? "").trim();
+        if (!messageText) continue;
 
-        // Idempotency: skip if already processed
-        const { data: existing } = await admin
-          .from("inbound_message_events")
-          .select("id")
-          .eq("provider", "meta_whatsapp")
-          .eq("provider_message_id", message.id)
-          .maybeSingle();
-
-        if (existing) {
-          console.info("[whatsapp/webhook] Duplicate message, skipping:", message.id);
+        // Guard against excessively long messages to prevent downstream resource exhaustion
+        const MAX_MESSAGE_LENGTH = 5000;
+        if (messageText.length > MAX_MESSAGE_LENGTH) {
+          console.warn(
+            `[whatsapp/webhook] Message ${message.id} exceeds ${MAX_MESSAGE_LENGTH} chars — skipping.`
+          );
           continue;
         }
 
-        // Persist the event
+        // Idempotency: use upsert with onConflict to atomically deduplicate,
+        // avoiding the TOCTOU race condition of a separate check-then-insert.
         const { data: event, error: insertErr } = await admin
           .from("inbound_message_events")
-          .insert({
-            workspace_id:        vendor.id,
-            provider:            "meta_whatsapp",
-            provider_message_id: message.id,
-            from_phone:          message.from,
-            to_phone:            toPhone,
-            message_type:        message.type,
-            message_text:        messageText,
-            payload:             message,
-          })
+          .upsert(
+            {
+              workspace_id:        vendor.id,
+              provider:            "meta_whatsapp",
+              provider_message_id: message.id,
+              from_phone:          message.from,
+              to_phone:            toPhone,
+              message_type:        message.type,
+              message_text:        messageText,
+              payload:             message,
+            },
+            { onConflict: "provider_message_id", ignoreDuplicates: true }
+          )
           .select("id")
-          .single();
+          .maybeSingle();
 
-        if (insertErr || !event) {
+        if (insertErr) {
           console.error("[whatsapp/webhook] Failed to save event:", insertErr?.message);
+          continue;
+        }
+
+        // If event is null, a row with this provider_message_id already existed (duplicate).
+        if (!event) {
+          console.info("[whatsapp/webhook] Duplicate message, skipping:", message.id);
           continue;
         }
 

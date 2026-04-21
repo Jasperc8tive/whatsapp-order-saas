@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
-import { getDashboardStats, getRecentOrders } from "@/lib/analytics";
+import { getDashboardStats, getRecentOrders, getSmartReplyAnalytics, getRecommendationAnalytics } from "@/lib/analytics";
 import { formatCurrency, formatRelativeTime, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "@/lib/utils";
+import { SmartReplyAnalyticsWidget } from "@/components/SmartReplyAnalyticsWidget";
+import { RecommendationAnalyticsWidget } from "@/components/RecommendationAnalyticsWidget";
 import type { OrderStatus } from "@/types/order";
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -45,14 +47,23 @@ function StatCard({ label, value, sub, positive, icon, accent }: StatCardProps) 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+import { getCurrentWorkspaceRole } from "@/lib/workspace";
+import BillingHealthCheckClientEntry from "@/components/BillingHealthCheckClientEntry";
+
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [stats, recentOrders] = await Promise.all([
+  // Real workspace owner check
+  const role = await getCurrentWorkspaceRole(user.id);
+  const isWorkspaceOwner = role === "owner";
+
+  const [stats, recentOrders, smartReplyAnalytics, recommendationAnalytics] = await Promise.all([
     getDashboardStats(supabase, user.id),
     getRecentOrders(supabase, user.id, 6),
+    getSmartReplyAnalytics(supabase, user.id),
+    getRecommendationAnalytics(supabase, user.id),
   ]);
 
   const ordersWoWLabel = stats.ordersWoW === 0
@@ -120,6 +131,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Billing health check for workspace owners */}
+      {isWorkspaceOwner && (
+        <div className="mb-4">
+          <BillingHealthCheckClientEntry />
+          <Link href="/dashboard/billing/diagnostics" className="block mt-2 text-xs text-blue-700 underline font-semibold">
+            Go to Billing Diagnostics →
+          </Link>
+        </div>
+      )}
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -147,8 +167,7 @@ export default async function DashboardPage() {
             {recentOrders.map((order) => (
               <li key={order.id}
                 className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors">
-
-                {/* Avatar + name + first item */}
+                {/* ...existing code... */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
                     {order.customerName[0]}
@@ -163,15 +182,13 @@ export default async function DashboardPage() {
                     </p>
                   </div>
                 </div>
-
-                {/* Status badges + amount + time */}
+                {/* ...existing code... */}
                 <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                   <span className={`hidden sm:inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                     ORDER_STATUS_COLORS[order.orderStatus as OrderStatus] ?? "bg-gray-100 text-gray-600"
                   }`}>
                     {ORDER_STATUS_LABELS[order.orderStatus as OrderStatus] ?? order.orderStatus}
                   </span>
-
                   {order.paymentStatus === "paid" && (
                     <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                       <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -180,7 +197,6 @@ export default async function DashboardPage() {
                       Paid
                     </span>
                   )}
-
                   <div className="text-right">
                     <p className="text-sm font-semibold text-gray-900">{formatCurrency(order.totalAmount)}</p>
                     <p className="text-[10px] text-gray-400">{formatRelativeTime(order.createdAt)}</p>
@@ -195,6 +211,11 @@ export default async function DashboardPage() {
       {/* ── Status breakdown ── */}
       <StatusBreakdown orders={recentOrders} />
 
+      {/* ── Smart Reply Analytics ── */}
+      <SmartReplyAnalyticsWidget analytics={smartReplyAnalytics} />
+
+      {/* ── Recommendation Analytics ── */}
+      <RecommendationAnalyticsWidget analytics={recommendationAnalytics} />
     </div>
   );
 }

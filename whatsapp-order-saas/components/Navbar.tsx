@@ -1,24 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import UserProfileMenu from "./UserProfileMenu";
 
 interface NavbarProps {
   title: string;
   vendorName?: string;
   vendorSlug?: string | null;
+  userEmail?: string;
   onMenuClick?: () => void;
 }
 
-export default function Navbar({ title, vendorName, vendorSlug, onMenuClick }: NavbarProps) {
-  const initial = vendorName ? vendorName[0].toUpperCase() : "V";
+export default function Navbar({ title, vendorName, vendorSlug, userEmail, onMenuClick }: NavbarProps) {
   const [copied, setCopied] = useState(false);
 
-  // Derive origin client-side only — avoids SSR/hydration mismatch.
-  // Initial value matches what the server rendered (NEXT_PUBLIC_SITE_URL),
-  // then updates to window.location.origin after mount.
-  const [origin, setOrigin] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
-  useEffect(() => { setOrigin(window.location.origin); }, []);
-
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const storeUrl = vendorSlug ? `${origin}/store/${vendorSlug}` : null;
 
   async function copyStoreLink() {
@@ -105,13 +101,8 @@ export default function Navbar({ title, vendorName, vendorSlug, onMenuClick }: N
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
         </button>
 
-        {/* Avatar */}
-        <div
-          title={vendorName}
-          className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold select-none flex-shrink-0"
-        >
-          {initial}
-        </div>
+        {/* Profile menu */}
+        {vendorName && <UserProfileMenu vendorName={vendorName} email={userEmail} />}
       </div>
     </header>
   );

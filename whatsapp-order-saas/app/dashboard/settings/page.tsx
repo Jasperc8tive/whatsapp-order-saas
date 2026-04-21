@@ -5,7 +5,7 @@ import SettingsForm from "@/components/SettingsForm";
 
 export default async function SettingsPage() {
 	const supabase = await createServerSupabaseClient();
-	const headerList = headers();
+	const headerList = await headers();
 	const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "";
 	const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
 	const siteOrigin = host ? `${protocol}://${host}` : (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
@@ -14,7 +14,7 @@ export default async function SettingsPage() {
 
 	const { data: vendor, error } = await supabase
 		.from("users")
-		.select("business_name, slug, phone")
+		.select("business_name, slug, phone, plan")
 		.eq("id", user.id)
 		.single();
 
@@ -28,6 +28,7 @@ export default async function SettingsPage() {
 			slug={vendor?.slug ?? ""}
 			siteOrigin={siteOrigin}
 			whatsappNumber={vendor?.phone ?? null}
+			currentPlan={(vendor?.plan as string | undefined) ?? "starter"}
 		/>
 	);
 }

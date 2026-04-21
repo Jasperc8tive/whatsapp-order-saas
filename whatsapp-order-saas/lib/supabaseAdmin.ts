@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { requireEnvValue } from "@/lib/env";
 
 /**
  * Service-role Supabase client — bypasses RLS.
@@ -6,12 +7,20 @@ import { createClient } from "@supabase/supabase-js";
  * NEVER import this in client components or expose SUPABASE_SERVICE_ROLE_KEY to the browser.
  */
 export function createAdminClient() {
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = requireEnvValue(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    "NEXT_PUBLIC_SUPABASE_URL"
+  );
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = requireEnvValue(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  );
+  const key = serviceRoleKey || anonKey;
 
-  if (!url || !key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars."
+  if (!serviceRoleKey) {
+    console.warn(
+      "[supabaseAdmin] SUPABASE_SERVICE_ROLE_KEY is missing. Falling back to anon key. Some admin-only operations may be limited."
     );
   }
 

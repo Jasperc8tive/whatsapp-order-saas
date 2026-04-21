@@ -1,11 +1,44 @@
 import crypto from "crypto";
+import { requireEnvValue } from "@/lib/env";
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 
+function isPlaceholderSecret(secret: string): boolean {
+  const normalized = secret.trim().toLowerCase();
+
+  return (
+    /x{8,}/.test(normalized) ||
+    normalized.includes("your-") ||
+    normalized.includes("replace-")
+  );
+}
+
 function getSecret(): string {
-  const key = process.env.PAYSTACK_SECRET_KEY;
-  if (!key) throw new Error("Missing PAYSTACK_SECRET_KEY env var.");
-  return key;
+  const configuredSecret =
+    process.env.PAYSTACK_SECRET_KEY ??
+    process.env.PAYSTACK_SK;
+
+  const secret = requireEnvValue(configuredSecret, "PAYSTACK_SECRET_KEY").trim();
+
+  if (secret.startsWith("pk_")) {
+    throw new Error(
+      "Invalid PAYSTACK_SECRET_KEY: expected a secret key (sk_test_... or sk_live_...), but got a public key (pk_...)."
+    );
+  }
+
+  if (!/^sk_(test|live)_/i.test(secret)) {
+    throw new Error(
+      "Invalid PAYSTACK_SECRET_KEY format. Expected key to start with sk_test_ or sk_live_."
+    );
+  }
+
+  if (isPlaceholderSecret(secret)) {
+    throw new Error(
+      "Invalid PAYSTACK_SECRET_KEY: a template or placeholder value is configured. Replace it with a real sk_test_... or sk_live_... key before starting checkout."
+    );
+  }
+
+  return secret;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -85,16 +118,29 @@ export async function initializeTransaction(
  * Used both in the webhook handler (double-check) and the verify-payment route.
  */
 export async function verifyTransaction(
-  reference: string
+  reference: string,
+  timeoutMs = 8000
 ): Promise<VerifyTransactionResponse> {
-  const res = await fetch(
-    `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
-    {
-      headers: { Authorization: `Bearer ${getSecret()}` },
-      // Disable Next.js data cache — payment state must always be live
-      cache: "no-store",
-    }
-  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${getSecret()}` },
+        // Disable Next.js data cache — payment state must always be live
+        cache: "no-store",
+        signal: controller.signal,
+      }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Paystack verify request failed: ${message}`);
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text();

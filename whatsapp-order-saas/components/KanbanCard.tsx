@@ -1,16 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useTransition, useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import type { Order, OrderStatus } from "@/types/order";
+import type { OrderAssignment } from "@/types/team";
+import { generateSmartReplySuggestions, trackSmartReplyUsage } from "@/lib/actions/orders";
 import {
   formatCurrency,
   formatRelativeTime,
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
 } from "@/lib/utils";
+
+// SLA badge color thresholds (in minutes)
+const SLA_THRESHOLDS = {
+  green: 15,   // < 15 min
+  amber: 30,   // < 30 min
+  red: 30      // >= 30 min
+};
+
+function getSlaBadgeColor(minutes: number) {
+  if (minutes < SLA_THRESHOLDS.green) return "bg-green-100 text-green-700 border-green-300";
+  if (minutes < SLA_THRESHOLDS.amber) return "bg-amber-100 text-amber-700 border-amber-300";
+  return "bg-red-100 text-red-700 border-red-300 animate-pulse";
+}
+
+function getSlaLabel(minutes: number) {
+  if (minutes < SLA_THRESHOLDS.green) return "On track";
+  if (minutes < SLA_THRESHOLDS.amber) return "Approaching SLA";
+  return "SLA Breached";
+}
+
+function isSlaBreached(minutes: number) {
+  return minutes >= SLA_THRESHOLDS.red;
+}
+import { getOrderAssignment } from "@/lib/actions/assignments";
+import AssignmentBadge from "./AssignmentBadge";
+import AssignmentModal from "./AssignmentModal";
 
 const ALL_STATUSES: OrderStatus[] = [
   "pending",
@@ -29,17 +56,43 @@ function toWaNumber(raw: string): string {
     : digits;
 }
 
+
+
 interface KanbanCardProps {
   order: Order;
+  workspaceId?: string;
+  canUseAiSmartReplies?: boolean;
   /** When true the card is rendered inside DragOverlay — no drag listeners */
   overlay?: boolean;
   onStatusChange?: (orderId: string, newStatus: OrderStatus) => void;
   isPending?: boolean;
+  assignment?: OrderAssignment | null;
 }
 
-export default function KanbanCard({ order, overlay = false, onStatusChange, isPending = false }: KanbanCardProps) {
+export default function KanbanCard({
+  order,
+  workspaceId,
+  canUseAiSmartReplies = false,
+  overlay = false,
+  onStatusChange,
+  isPending = false,
+  assignment = null,
+}: KanbanCardProps) {
   const [localPending, startTransition] = useTransition();
   const isUpdating = isPending || localPending;
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  // No internal assignment state; rely on prop
+  const isLoadingAssignment = false;
+
+  // Smart reply state
+  const [isGeneratingReplies, startGeneratingReplies] = useTransition();
+  const [latestCustomerMessage, setLatestCustomerMessage] = useState("");
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [replyConfidence, setReplyConfidence] = useState<number | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [copiedReplyIndex, setCopiedReplyIndex] = useState<number | null>(null);
+
+
 
   function handleStatusSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const newStatus = e.target.value as OrderStatus;
@@ -52,11 +105,6 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: order.id, data: { order } });
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.35 : 1,
-  };
-
   const firstItem = order.items[0];
 
   // Build a wa.me link so vendors can tap the number and open WhatsApp immediately
@@ -64,21 +112,67 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
     ? `https://wa.me/${toWaNumber(order.customer_phone)}`
     : null;
 
+  function handleGenerateReplies() {
+    if (!canUseAiSmartReplies || overlay) return;
+    setReplyError(null);
+    setCopiedReplyIndex(null);
+
+    startGeneratingReplies(async () => {
+      const result = await generateSmartReplySuggestions(
+        order.id,
+        latestCustomerMessage.trim() || undefined,
+        "kanban_card"
+      );
+
+      if (result.error) {
+        setSmartReplies([]);
+        setReplyConfidence(null);
+        setReplyError(result.error);
+        return;
+      }
+
+      setSmartReplies(result.data?.suggestions ?? []);
+      setReplyConfidence(result.data?.confidence ?? null);
+    });
+  }
+
+  async function handleCopyReply(text: string, index: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedReplyIndex(index);
+      setTimeout(() => setCopiedReplyIndex((i) => (i === index ? null : i)), 1500);
+      void trackSmartReplyUsage(order.id, "copied", {
+        surface: "kanban_card",
+        suggestion_index: index,
+      });
+    } catch {
+      setReplyError("Could not copy suggestion. Copy manually instead.");
+    }
+  }
+
+
+  // SLA badge calculation
+  const createdAt = new Date(order.created_at);
+  const now = new Date();
+  const ageMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+  const slaColor = getSlaBadgeColor(ageMinutes);
+  const slaLabel = getSlaLabel(ageMinutes);
+
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
-      style={overlay ? undefined : style}
       className={[
         "bg-white rounded-xl border p-4 select-none",
         overlay
           ? "shadow-2xl rotate-1 scale-[1.03] border-green-300"
           : "border-gray-200 shadow-sm hover:shadow-md transition-shadow",
         isDragging ? "cursor-grabbing" : "",
+        !overlay && transform ? "translate-x-0 translate-y-0" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {/* Header: drag grip + customer name + status badge */}
+      {/* Header: drag grip + customer name + status badge + SLA badge */}
       <div className="flex items-start gap-2 mb-3">
         {/* Drag grip — only this element triggers drag, so tapping elsewhere works normally */}
         <div
@@ -98,6 +192,23 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           <p className="font-semibold text-gray-800 text-sm leading-tight truncate">
             {order.customer_name}
           </p>
+        </div>
+
+
+        {/* SLA badge (always shown) */}
+        <div
+          className={["flex flex-col items-end ml-2 min-w-[70px] relative", slaColor, "border px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors duration-300"].join(" ")}
+          title={slaLabel}
+        >
+          <span>{formatRelativeTime(order.created_at)}</span>
+          <span className="font-normal flex items-center gap-1">
+            {slaLabel}
+            {isSlaBreached(ageMinutes) && (
+              <svg className="w-3.5 h-3.5 text-red-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            )}
+          </span>
         </div>
 
         {/* Status selector — click to change without dragging */}
@@ -149,7 +260,7 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
         )}
       </div>
 
-      {/* Footer: amount + time */}
+      {/* Footer: amount + time + assignment */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-bold text-gray-900">
           {formatCurrency(order.total_amount)}
@@ -162,6 +273,18 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           {formatRelativeTime(order.created_at)}
         </div>
       </div>
+
+      {/* Assignment */}
+      {workspaceId && !overlay && (
+        <div className="flex items-center gap-1 py-2 px-2 mb-2 bg-gray-50 rounded-lg">
+          <span className="text-[10px] text-gray-500 font-medium">Assigned:</span>
+          <AssignmentBadge
+            assignment={assignment}
+            isLoading={isLoadingAssignment}
+            onClick={() => setShowAssignmentModal(true)}
+          />
+        </div>
+      )}
 
       {/* WhatsApp phone — tappable link */}
       {order.customer_phone && (
@@ -197,6 +320,108 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
         </div>
       )}
 
+      {/* Pro AI Smart Reply suggestions */}
+      {!overlay && (
+        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold text-gray-600">Smart Replies</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+              Pro
+            </span>
+          </div>
+
+          {canUseAiSmartReplies ? (
+            <>
+              <textarea
+                value={latestCustomerMessage}
+                onChange={(e) => setLatestCustomerMessage(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                rows={2}
+                placeholder="Optional: paste latest customer message"
+                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-300"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGenerateReplies();
+                }}
+                disabled={isGeneratingReplies || !order.customer_phone}
+                className="w-full rounded-lg bg-gray-900 text-white text-[11px] font-semibold py-1.5 hover:bg-gray-800 transition-colors disabled:opacity-50"
+              >
+                {isGeneratingReplies ? "Generating..." : "Generate Smart Replies"}
+              </button>
+
+              {replyConfidence !== null && (
+                <p className="text-[10px] text-gray-500">
+                  Confidence: {Math.round(replyConfidence * 100)}%
+                </p>
+              )}
+
+              {replyError && <p className="text-[10px] text-red-600">{replyError}</p>}
+
+              {smartReplies.length > 0 && (
+                <div className="space-y-1.5">
+                  {smartReplies.map((reply, index) => {
+                    const quickSendLink = waLink
+                      ? `${waLink}?text=${encodeURIComponent(reply)}`
+                      : null;
+
+                    return (
+                      <div key={`${order.id}-reply-${index}`} className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                        <p className="text-[11px] text-gray-700 leading-relaxed">{reply}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCopyReply(reply, index);
+                            }}
+                            className="text-[10px] text-gray-600 hover:text-gray-900 font-medium"
+                          >
+                            {copiedReplyIndex === index ? "Copied" : "Copy"}
+                          </button>
+                          {quickSendLink && (
+                            <a
+                              href={quickSendLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void trackSmartReplyUsage(order.id, "whatsapp_clicked", {
+                                  surface: "kanban_card",
+                                  suggestion_index: index,
+                                });
+                              }}
+                              className="text-[10px] text-green-600 hover:text-green-700 font-medium"
+                            >
+                              Use in WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+              <p className="text-[10px] text-amber-800">
+                Smart Replies are available on Pro.
+              </p>
+              <Link
+                href="/dashboard/billing?feature=smart-replies"
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 inline-block text-[10px] font-semibold text-amber-900 hover:text-amber-700"
+              >
+                Upgrade to Pro
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* View order detail */}
       <div className="pt-2 mt-1 border-t border-gray-100">
         <Link
@@ -207,6 +432,16 @@ export default function KanbanCard({ order, overlay = false, onStatusChange, isP
           View details →
         </Link>
       </div>
+
+      {/* Assignment modal */}
+      {showAssignmentModal && workspaceId && (
+        <AssignmentModal
+          orderId={order.id}
+          workspaceId={workspaceId}
+          currentAssignment={assignment}
+          onClose={() => setShowAssignmentModal(false)}
+        />
+      )}
     </div>
   );
 }

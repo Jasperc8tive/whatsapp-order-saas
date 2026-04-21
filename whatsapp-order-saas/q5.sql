@@ -1,0 +1,1 @@
+SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='payments') AS payments_count, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='order_items') AS order_items_count, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='deliveries') AS deliveries_count;

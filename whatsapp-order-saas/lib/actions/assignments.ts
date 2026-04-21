@@ -4,22 +4,32 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { logActivity } from "@/lib/activity";
+import { enqueueNotificationJob } from "@/lib/notificationQueue";
 import type { OrderAssignment } from "@/types/team";
+import type { WorkspaceRole } from "@/types/team";
 
-// ─── Assign an order to a team member ───────────────────────────────────────
+type AssignmentActor = {
+  userId: string;
+  workspaceId: string;
+  role: WorkspaceRole;
+};
 
-export async function assignOrder(
-  orderId: string,
-  assignedToUserId: string,
-  reason?: string
-): Promise<{ ok?: boolean; error?: string }> {
+function parseWorkspaceRole(role: unknown): WorkspaceRole | null {
+  if (role === "owner" || role === "staff" || role === "delivery_manager") {
+    return role;
+  }
+  return null;
+}
+
+async function resolveOrderActor(
+  orderId: string
+): Promise<{ actor?: AssignmentActor; error?: string }> {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated." };
 
   const admin = createAdminClient();
 
-  // Resolve workspace for this order
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .select("vendor_id")
@@ -29,9 +39,19 @@ export async function assignOrder(
   if (orderErr || !order) return { error: "Order not found." };
 
   const workspaceId = order.vendor_id as string;
+  const isOwner = user.id === workspaceId;
 
-  // Verify caller is a member of this workspace (owner or staff)
-  const { data: callerMembership } = await admin
+  if (isOwner) {
+    return {
+      actor: {
+        userId: user.id,
+        workspaceId,
+        role: "owner",
+      },
+    };
+  }
+
+  const { data: member, error: memberErr } = await admin
     .from("workspace_members")
     .select("role")
     .eq("workspace_id", workspaceId)
@@ -39,24 +59,101 @@ export async function assignOrder(
     .eq("is_active", true)
     .maybeSingle();
 
-  const callerIsOwner = user.id === workspaceId;
-  const callerRole = callerMembership?.role as string | undefined;
+  if (memberErr || !member) return { error: "You do not have access to this order." };
 
-  if (!callerIsOwner && callerRole !== "staff" && callerRole !== "delivery_manager") {
+  const role = parseWorkspaceRole(member.role);
+  if (!role) return { error: "Invalid workspace role configuration." };
+
+  return {
+    actor: {
+      userId: user.id,
+      workspaceId,
+      role,
+    },
+  };
+}
+
+async function resolveWorkspaceActor(
+  workspaceId: string
+): Promise<{ actor?: AssignmentActor; error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  if (user.id === workspaceId) {
+    return {
+      actor: {
+        userId: user.id,
+        workspaceId,
+        role: "owner",
+      },
+    };
+  }
+
+  const admin = createAdminClient();
+  const { data: member, error } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !member) return { error: "You do not have access to this workspace." };
+
+  const role = parseWorkspaceRole(member.role);
+  if (!role) return { error: "Invalid workspace role configuration." };
+
+  return {
+    actor: {
+      userId: user.id,
+      workspaceId,
+      role,
+    },
+  };
+}
+
+// ─── Assign an order to a team member ───────────────────────────────────────
+
+export async function assignOrder(
+  orderId: string,
+  assignedToUserId: string,
+  reason?: string
+): Promise<{ ok?: boolean; error?: string }> {
+  if (!orderId || !assignedToUserId) {
+    return { error: "Order and assignee are required." };
+  }
+
+  const actorResult = await resolveOrderActor(orderId);
+  if (!actorResult.actor) return { error: actorResult.error ?? "Access denied." };
+
+  const actor = actorResult.actor;
+  const admin = createAdminClient();
+
+  if (actor.role !== "owner" && actor.role !== "staff" && actor.role !== "delivery_manager") {
     return { error: "You do not have permission to assign orders." };
   }
 
-  // Delivery managers can only assign to themselves or other delivery managers
-  if (callerRole === "delivery_manager" && assignedToUserId !== user.id) {
-    const { data: targetMembership } = await admin
-      .from("workspace_members")
-      .select("role")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", assignedToUserId)
-      .eq("is_active", true)
-      .maybeSingle();
+  const { data: targetMembership } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", actor.workspaceId)
+    .eq("user_id", assignedToUserId)
+    .eq("is_active", true)
+    .maybeSingle();
 
-    if (targetMembership?.role !== "delivery_manager") {
+  const targetIsOwner = assignedToUserId === actor.workspaceId;
+  const targetRole = targetIsOwner
+    ? "owner"
+    : parseWorkspaceRole(targetMembership?.role);
+
+  if (!targetRole) {
+    return { error: "Selected assignee is not an active member of this workspace." };
+  }
+
+  // Delivery managers can only assign to themselves or other delivery managers
+  if (actor.role === "delivery_manager" && assignedToUserId !== actor.userId) {
+    if (targetRole !== "delivery_manager") {
       return { error: "Delivery managers can only assign orders to other delivery managers." };
     }
   }
@@ -68,8 +165,8 @@ export async function assignOrder(
       {
         order_id:    orderId,
         assigned_to: assignedToUserId,
-        assigned_by: user.id,
-        reason:      reason ?? null,
+        assigned_by: actor.userId,
+        reason:      reason?.trim() ? reason.trim() : null,
       },
       { onConflict: "order_id" }
     );
@@ -77,13 +174,30 @@ export async function assignOrder(
   if (upsertErr) return { error: upsertErr.message };
 
   await logActivity({
-    workspaceId,
-    actorId: user.id,
+    workspaceId: actor.workspaceId,
+    actorId: actor.userId,
     entityType: "order",
     entityId: orderId,
     action: "order_assigned",
     meta: { assigned_to: assignedToUserId, reason },
   });
+
+  // ── Manager assignment notification ──
+  // Fetch assignee phone/email for notification
+  const { data: assignee } = await admin
+    .from("users")
+    .select("phone, email, display_name")
+    .eq("id", assignedToUserId)
+    .maybeSingle();
+  if (assignee?.phone) {
+    await enqueueNotificationJob({
+      type: "manager_assignment",
+      recipient: assignee.phone,
+      channel: "whatsapp",
+      template: `You have been assigned a new order (${orderId.slice(0,8).toUpperCase()}). Please check your dashboard.`,
+      data: { orderId, assignedBy: actor.userId, reason },
+    });
+  }
 
   revalidatePath(`/dashboard/orders/${orderId}`);
   revalidatePath("/dashboard/orders");
@@ -96,9 +210,10 @@ export async function assignOrder(
 export async function getOrderAssignment(
   orderId: string
 ): Promise<{ assignment?: OrderAssignment | null; error?: string }> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated." };
+  const actorResult = await resolveOrderActor(orderId);
+  if (!actorResult.actor) return { error: actorResult.error ?? "Access denied." };
+
+  const actor = actorResult.actor;
 
   const admin = createAdminClient();
 
@@ -111,17 +226,26 @@ export async function getOrderAssignment(
   if (error) return { error: error.message };
   if (!data) return { assignment: null };
 
-  // Enrich with assignee info
-  const { data: assigneeAuth } = await admin.auth.admin.getUserById(
-    data.assigned_to as string
-  );
+  const assignedTo = data.assigned_to as string;
+  const assignedToIsOwner = assignedTo === actor.workspaceId;
 
-  const assigneeEmail = assigneeAuth?.user?.email ?? null;
   const { data: memberRow } = await admin
     .from("workspace_members")
     .select("display_name")
-    .eq("user_id", data.assigned_to)
+    .eq("workspace_id", actor.workspaceId)
+    .eq("user_id", assignedTo)
     .maybeSingle();
+
+  if (!assignedToIsOwner && !memberRow) {
+    return { error: "Assignment assignee is not an active workspace member." };
+  }
+
+  // Enrich with assignee info
+  const { data: assigneeAuth } = await admin.auth.admin.getUserById(
+    assignedTo
+  );
+
+  const assigneeEmail = assigneeAuth?.user?.email ?? null;
 
   const assignment: OrderAssignment = {
     id:             data.id as string,
@@ -142,19 +266,34 @@ export async function getOrderAssignment(
 export async function unassignOrder(
   orderId: string
 ): Promise<{ ok?: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated." };
+  if (!orderId) return { error: "Order is required." };
+
+  const actorResult = await resolveOrderActor(orderId);
+  if (!actorResult.actor) return { error: actorResult.error ?? "Access denied." };
+
+  const actor = actorResult.actor;
 
   const admin = createAdminClient();
 
-  const { data: order } = await admin
-    .from("orders")
-    .select("vendor_id")
-    .eq("id", orderId)
-    .maybeSingle();
+  if (actor.role !== "owner" && actor.role !== "staff" && actor.role !== "delivery_manager") {
+    return { error: "You do not have permission to unassign orders." };
+  }
 
-  if (!order) return { error: "Order not found." };
+  if (actor.role === "delivery_manager") {
+    const { data: currentAssignment } = await admin
+      .from("order_assignments")
+      .select("assigned_to")
+      .eq("order_id", orderId)
+      .maybeSingle();
+
+    if (!currentAssignment) {
+      return { error: "Order is not currently assigned." };
+    }
+
+    if (currentAssignment?.assigned_to !== actor.userId) {
+      return { error: "Delivery managers can only unassign orders assigned to themselves." };
+    }
+  }
 
   const { error } = await admin
     .from("order_assignments")
@@ -164,8 +303,8 @@ export async function unassignOrder(
   if (error) return { error: error.message };
 
   await logActivity({
-    workspaceId: order.vendor_id as string,
-    actorId: user.id,
+    workspaceId: actor.workspaceId,
+    actorId: actor.userId,
     entityType: "order",
     entityId: orderId,
     action: "order_unassigned",
@@ -183,6 +322,10 @@ export async function unassignOrder(
 export async function listAssignableMembers(
   workspaceId: string
 ): Promise<{ members?: Array<{ user_id: string; display_name: string | null; email: string; role: string }>; error?: string }> {
+  const actorResult = await resolveWorkspaceActor(workspaceId);
+  if (!actorResult.actor) return { error: actorResult.error ?? "Access denied." };
+
+  const actor = actorResult.actor;
   const admin = createAdminClient();
 
   const { data, error } = await admin
@@ -194,8 +337,13 @@ export async function listAssignableMembers(
 
   if (error) return { error: error.message };
 
+  let permitted = data ?? [];
+  if (actor.role === "delivery_manager") {
+    permitted = permitted.filter((m) => m.user_id === actor.userId || m.role === "delivery_manager");
+  }
+
   const enriched = await Promise.all(
-    (data ?? []).map(async (m) => {
+    permitted.map(async (m) => {
       const { data: au } = await admin.auth.admin.getUserById(m.user_id as string);
       return {
         user_id:      m.user_id as string,
@@ -213,7 +361,7 @@ export async function listAssignableMembers(
     .eq("id", workspaceId)
     .maybeSingle();
 
-  if (ownerRow) {
+  if (ownerRow && actor.role !== "delivery_manager") {
     const alreadyIncluded = enriched.some((m) => m.user_id === workspaceId);
     if (!alreadyIncluded) {
       const { data: ownerAuth } = await admin.auth.admin.getUserById(workspaceId);

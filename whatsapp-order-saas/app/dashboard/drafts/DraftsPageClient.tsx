@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { approveDraft, rejectDraft } from "@/lib/actions/drafts";
+import DraftReviewModal from "@/components/DraftReviewModal";
 import type { OrderDraft } from "@/lib/actions/drafts";
 
 interface Props {
@@ -29,6 +30,7 @@ function ConfidenceBadge({ confidence }: { confidence: number | null }) {
 export default function DraftsPageClient({ initialDrafts, fetchError }: Props) {
   const [drafts, setDrafts] = useState(initialDrafts);
   const [activeTab, setActiveTab] = useState<"pending_review" | "converted" | "rejected">("pending_review");
+  const [selectedDraft, setSelectedDraft] = useState<OrderDraft | null>(null);
   const [rejectReason, setRejectReason]     = useState<Record<string, string>>({});
   const [expandedId, setExpandedId]         = useState<string | null>(null);
   const [toast, setToast]                   = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -191,12 +193,25 @@ export default function DraftsPageClient({ initialDrafts, fetchError }: Props) {
                       </p>
                     )}
                   </div>
-                  <svg
-                    className={`w-5 h-5 text-gray-400 flex-shrink-0 ml-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    {activeTab === "pending_review" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDraft(draft);
+                        }}
+                        className="text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        Review
+                      </button>
+                    )}
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
 
                 {/* Expanded content */}
@@ -273,6 +288,19 @@ export default function DraftsPageClient({ initialDrafts, fetchError }: Props) {
             );
           })}
         </div>
+      )}
+
+      {/* Modal */}
+      {selectedDraft && (
+        <DraftReviewModal
+          draft={selectedDraft}
+          onClose={() => setSelectedDraft(null)}
+          onSuccess={(orderId) => {
+            const ref = orderId?.slice(0, 8).toUpperCase();
+            showToast("success", `Order created${ref ? ` – #${ref}` : ""}!`);
+            setDrafts((prev) => prev.filter((d) => d.id !== selectedDraft.id));
+          }}
+        />
       )}
     </div>
   );

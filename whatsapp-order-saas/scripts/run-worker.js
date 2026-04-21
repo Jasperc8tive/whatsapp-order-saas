@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 const maxJobs = process.env.WORKER_MAX_JOBS ?? "40";
 const baseUrl = (process.env.WORKER_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const secret = process.env.WORKER_SECRET;
