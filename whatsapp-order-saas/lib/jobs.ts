@@ -13,6 +13,8 @@ export interface JobRow {
   max_attempts: number;
   run_at: string;
   last_error: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export async function enqueueJob(
@@ -44,31 +46,28 @@ export async function claimNextJob(queueName: string): Promise<JobRow | null> {
 
   const nowIso = new Date().toISOString();
   
-  // Sprint 1 Fix: Use atomic job claiming with SELECT FOR UPDATE SKIP LOCKED (Audit Finding #6 CRITICAL)
-  // This prevents two workers from claiming the same job simultaneously
-  
-  // First, find a candidate job using SKIP LOCKED pattern via RPC or raw query
-  // Since Supabase JS client doesn't support FOR UPDATE directly, we use a two-step approach:
-  // 1. Select candidate with status check
-  // 2. Try to update it atomically with status condition
-  
-  const { data: candidates } = await admin
+  // ✅ FIX: Select both id AND attempts so we can access candidate.attempts
+  const { data: candidates, error: fetchError } = await admin
     .from("job_queue")
-    .select("id")
+    .select("id, attempts") // ← Added 'attempts' here
     .eq("queue_name", queueName)
     .in("status", ["queued", "failed"])
     .lt("attempts", 8)
     .lte("run_at", nowIso)
     .order("run_at", { ascending: true })
-    .limit(5); // Get a few candidates to try
+    .limit(5);
 
-  const candidate = candidates?.[0];
-  if (!candidate) return null;
+  if (fetchError || !candidates || candidates.length === 0) {
+    return null;
+  }
 
-  // Try to claim this specific job atomically
+  const candidate = candidates[0];
+  
+  // ✅ TypeScript now knows candidate has 'attempts' property
   const nextAttempts = Number(candidate.attempts ?? 0) + 1;
 
-  const { data: claimed } = await admin
+  // Try to claim this specific job atomically
+  const { data: claimed, error: claimError } = await admin
     .from("job_queue")
     .update({
       status: "running",
@@ -76,11 +75,11 @@ export async function claimNextJob(queueName: string): Promise<JobRow | null> {
       updated_at: nowIso,
     })
     .eq("id", candidate.id)
-    .in("status", ["queued", "failed"]) // Only update if still in claimable state
+    .in("status", ["queued", "failed"])
     .select("*")
     .maybeSingle();
 
-  if (!claimed) {
+  if (claimError || !claimed) {
     // Another worker claimed it first, return null to retry
     return null;
   }
