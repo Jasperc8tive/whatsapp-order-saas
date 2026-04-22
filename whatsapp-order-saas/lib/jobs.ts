@@ -13,6 +13,8 @@ export interface JobRow {
   max_attempts: number;
   run_at: string;
   last_error: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export async function enqueueJob(
@@ -43,22 +45,29 @@ export async function claimNextJob(queueName: string): Promise<JobRow | null> {
   const admin = createAdminClient();
 
   const nowIso = new Date().toISOString();
-  const { data: candidates } = await admin
+  
+  // ✅ FIX: Select both id AND attempts so we can access candidate.attempts
+  const { data: candidates, error: fetchError } = await admin
     .from("job_queue")
-    .select("*")
+    .select("id, attempts") // ← Added 'attempts' here
     .eq("queue_name", queueName)
     .in("status", ["queued", "failed"])
     .lt("attempts", 8)
     .lte("run_at", nowIso)
     .order("run_at", { ascending: true })
-    .limit(1);
+    .limit(5);
 
-  const candidate = candidates?.[0];
-  if (!candidate) return null;
+  if (fetchError || !candidates || candidates.length === 0) {
+    return null;
+  }
 
+  const candidate = candidates[0];
+  
+  // ✅ TypeScript now knows candidate has 'attempts' property
   const nextAttempts = Number(candidate.attempts ?? 0) + 1;
 
-  const { data: claimed } = await admin
+  // Try to claim this specific job atomically
+  const { data: claimed, error: claimError } = await admin
     .from("job_queue")
     .update({
       status: "running",
@@ -70,7 +79,10 @@ export async function claimNextJob(queueName: string): Promise<JobRow | null> {
     .select("*")
     .maybeSingle();
 
-  if (!claimed) return null;
+  if (claimError || !claimed) {
+    // Another worker claimed it first, return null to retry
+    return null;
+  }
 
   return {
     id: claimed.id as string,

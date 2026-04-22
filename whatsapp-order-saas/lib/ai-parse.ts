@@ -14,8 +14,25 @@
  */
 
 import OpenAI from "openai";
+import { z } from "zod";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+// Zod schema for strict validation of AI output - Sprint 1 Fix for Audit Finding #5 (CRITICAL)
+const AIOrderOutputSchema = z.object({
+  confidence: z.number().min(0).max(1),
+  items: z.array(
+    z.object({
+      product_id: z.string().uuid(),
+      product_name: z.string().min(1),
+      quantity: z.number().int().positive(),
+    })
+  ),
+  customer_name: z.string().nullable(),
+  notes: z.string().nullable(),
+  missing_fields: z.array(z.string()),
+  clarification_question: z.string().nullable(),
+});
 
 export interface CatalogItem {
   id: string;
@@ -154,6 +171,27 @@ export async function parseOrderFromMessage(
       raw_output: raw,
     };
   }
+
+  // Sprint 1 Fix: Validate AI output against strict Zod schema (Audit Finding #5 CRITICAL)
+  const schemaResult = AIOrderOutputSchema.safeParse(parsed);
+  if (!schemaResult.success) {
+    console.warn("[ai-parse] AI output failed Zod validation:", schemaResult.error.message);
+    return {
+      status: "failed",
+      decision: "clarify",
+      confidence: 0,
+      items: [],
+      customer_name: null,
+      notes: null,
+      missing_fields: ["invalid_schema"],
+      clarification_question:
+        "Sorry, I had trouble processing your order. Could you please rephrase it?",
+      raw_output: raw,
+    };
+  }
+
+  // Use validated data
+  parsed = schemaResult.data;
 
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0)));
 
