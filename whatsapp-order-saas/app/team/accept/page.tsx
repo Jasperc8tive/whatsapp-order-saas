@@ -9,25 +9,27 @@ function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const hasToken = !!token;
+
+  const [isLoading, setIsLoading] = useState(hasToken);
+  const [error, setError] = useState<string | null>(
+    hasToken ? null : "No invitation token provided. Check your invitation link."
+  );
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      setError("No invitation token provided. Check your invitation link.");
-      setIsLoading(false);
-      return;
-    }
+    if (!token) return;
 
     const accept = async () => {
       try {
         const result = await acceptInvitation(token);
+
         if (result.error) {
           setError(result.error);
         } else if (result.ok) {
           setSuccess(true);
-          // Redirect to dashboard after 2 seconds
+
+          // Redirect after delay
           setTimeout(() => {
             router.push("/dashboard");
           }, 2000);
@@ -45,6 +47,7 @@ function AcceptInvitationContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+
         {isLoading && (
           <>
             <div className="flex justify-center mb-4">
@@ -85,9 +88,12 @@ function AcceptInvitationContent() {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">Invitation Accepted!</h1>
-            <p className="text-gray-600 mb-6">You&apos;re now part of the workspace. Redirecting to dashboard...</p>
+            <p className="text-gray-600 mb-6">
+              You&apos;re now part of the workspace. Redirecting to dashboard...
+            </p>
           </>
         )}
+
       </div>
     </div>
   );

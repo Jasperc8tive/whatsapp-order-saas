@@ -392,7 +392,8 @@ export default function TeamManagementClient({
               .filter((i) => i.status === "pending")
               .map((invitation) => {
                 const expiresAt = new Date(invitation.expires_at);
-                const isExpiring = expiresAt < new Date(Date.now() + 24 * 60 * 60 * 1000);
+                const now = Date.now();
+                const isExpiring = expiresAt.getTime() < now + 24 * 60 * 60 * 1000;;
 
                 return (
                   <div
