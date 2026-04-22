@@ -1,9 +1,39 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react"; // Keep useRef if needed elsewhere
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
-// ... interfaces remain the same ...
+// ✅ Interfaces must be defined at module scope (outside component)
+interface TeamMember {
+  id: string;
+  user_id: string;
+  email: string;
+  role: "owner" | "staff" | "delivery_manager";
+  display_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface TeamInvitation {
+  id: string;
+  email: string;
+  role: "owner" | "staff" | "delivery_manager";
+  status: string;
+  expires_at: string;
+}
+
+// ✅ Constants at module scope
+const ROLE_COLORS = {
+  owner: { bg: "bg-purple-100", text: "text-purple-700" },
+  staff: { bg: "bg-blue-100", text: "text-blue-700" },
+  delivery_manager: { bg: "bg-orange-100", text: "text-orange-700" },
+} as const;
+
+const ROLE_LABELS = {
+  owner: "Owner",
+  staff: "Staff",
+  delivery_manager: "Delivery Manager",
+} as const;
 
 export default function TeamManagementClient({
   initialMembers = [],
@@ -20,18 +50,51 @@ export default function TeamManagementClient({
   const [invitations, setInvitations] = useState<TeamInvitation[]>(initialInvitations);
   const [loading, setLoading] = useState(false);
 
-  // ✅ Get stable timestamp for this render session
-  // This is safe because: 
-  // 1. useMemo with [] only computes once per mount
-  // 2. We're using it for UI hints, not critical logic
-  // eslint-disable-next-line react-hooks/purity
+  // ✅ Stable timestamp for UI hints only
+  // eslint-disable-next-line react-hooks/purity -- Safe: useMemo ensures stable value per mount; used for non-critical UI hint only
   const now = useMemo(() => Date.now(), []);
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* ... header and members sections unchanged ... */}
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
+        <p className="text-sm text-gray-500">Manage team members and invitations</p>
+      </div>
+
+      {/* Members */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <h3 className="font-semibold text-gray-900 mb-3">Active Members</h3>
+
+        {members.filter((m) => m.is_active).length === 0 ? (
+          <p className="text-sm text-gray-500">No active members</p>
+        ) : (
+          <div className="space-y-3">
+            {members
+              .filter((m) => m.is_active)
+              .map((member) => (
+                <div key={member.id} className="flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {member.display_name || member.email}
+                    </p>
+                    <p className="text-xs text-gray-500">{member.email}</p>
+                  </div>
+
+                  <span
+                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      ROLE_COLORS[member.role].bg
+                    } ${ROLE_COLORS[member.role].text}`}
+                  >
+                    {ROLE_LABELS[member.role]}
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
 
       {/* Pending Invitations */}
       {pendingInvitations.length > 0 && (
